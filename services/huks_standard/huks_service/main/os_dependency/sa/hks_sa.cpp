@@ -208,18 +208,18 @@ void HksDeathRecipient::OnRemoteDied(const wptr<IRemoteObject>& remoteObject)
         index++;
     }
 
-    NotifyExtOnBinderDied(callingUid_);
+    NotifyExtOnBinderDied(callingAppUid_);
 
     HKS_LOG_I("The death process[%" LOG_PUBLIC "d] cache has been cleared [%" LOG_PUBLIC "d] operations!",
         callingPid_, index);
 }
 
-void HksDeathRecipient::NotifyExtOnBinderDied(int32_t uid)
+void HksDeathRecipient::NotifyExtOnBinderDied(int32_t appUid)
 {
 #ifdef SUPPORT_COMMON_EVENT
     OHOS::AAFwk::Want want;
     want.SetAction(COMMON_EVENT_HKS_BINDER_DIED);
-    want.SetParam("uid", uid);
+    want.SetParam("uid", appUid);
     
     OHOS::EventFwk::CommonEventData eventData;
     eventData.SetWant(want);
@@ -230,8 +230,8 @@ void HksDeathRecipient::NotifyExtOnBinderDied(int32_t uid)
 #endif
 }
 
-HksDeathRecipient::HksDeathRecipient(int32_t callingPid, int32_t callingUid)
-    : callingPid_(callingPid), callingUid_(callingUid) {}
+HksDeathRecipient::HksDeathRecipient(int32_t callingPid, int32_t callingAppUid)
+    : callingPid_(callingPid), callingAppUid_(callingAppUid) {}
 
 static int32_t ProcessAttestOrNormalMessage(
     uint32_t code, MessageParcel &data, uint32_t outSize, const struct HksBlob &srcData, MessageParcel &reply)
@@ -253,15 +253,15 @@ static int32_t ProcessAttestOrNormalMessage(
         sptr<IRemoteObject> remoteObject = data.ReadRemoteObject();
         if (remoteObject != HKS_NULL_POINTER) {
             int32_t callingPid = IPCSkeleton::GetCallingPid();
-            int32_t callingUid = IPCSkeleton::GetCallingUid();
-            auto deathRecipient = new (std::nothrow) OHOS::Security::Hks::HksDeathRecipient(callingPid, callingUid);
+            int32_t callingAppUid = IPCSkeleton::GetCallingUid();
+            auto deathRecipient = new (std::nothrow) OHOS::Security::Hks::HksDeathRecipient(callingPid, callingAppUid);
             if (deathRecipient != nullptr) {
                 remoteObject->AddDeathRecipient(deathRecipient);
             } else {
-                HKS_LOG_E("Failed to allocate HksDeathRecipient for pid: %" LOG_PUBLIC "d, uid: %" LOG_PUBLIC "d",
-                    callingPid, callingUid);
+                HKS_LOG_E("Failed to allocate HksDeathRecipient for pid: %" LOG_PUBLIC "d, appUid: %" LOG_PUBLIC "d",
+                    callingPid, callingAppUid);
             }
-            HKS_LOG_I("Add bundleDead for pid: %" LOG_PUBLIC "d, uid: %" LOG_PUBLIC "d", callingPid, callingUid);
+            HKS_LOG_I("Add bundleDead for pid: %" LOG_PUBLIC "d, appUid: %" LOG_PUBLIC "d", callingPid, callingAppUid);
         }
     } else if (code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY) {
         auto ptr = data.ReadRemoteObject();
@@ -305,10 +305,10 @@ static void ProcessRemoteRequest(uint32_t code, MessageParcel &data, MessageParc
         "handle ipc msg failed!")
 }
 
-static std::string GetTimeoutMonitorMarkTag(uint32_t code, uint32_t callingUid)
+static std::string GetTimeoutMonitorMarkTag(uint32_t code, uint32_t callingAppUid)
 {
-    std::string markTag = (std::ostringstream{} << "huks:OnRemoteRequest, code = " << code << ", callingUid = " <<
-        callingUid << ", sessionId = " << g_sessionId).str();
+    std::string markTag = (std::ostringstream{} << "huks:OnRemoteRequest, code = " << code << ", callingAppUid = " <<
+        callingAppUid << ", sessionId = " << g_sessionId).str();
     return markTag;
 }
 
@@ -330,18 +330,18 @@ int HksService::OnRemoteRequest(uint32_t code, MessageParcel &data, MessageParce
     uint64_t enterTime = 0;
     (void)HksElapsedRealTime(&enterTime);
     uint32_t currentSessionId = g_sessionId.fetch_add(1, std::memory_order_relaxed);
-    auto callingUid = IPCSkeleton::GetCallingUid();
-    int userId = HksGetOsAccountIdFromUid(callingUid);
+    auto callingAppUid = IPCSkeleton::GetCallingUid();
+    int userId = HksGetOsAccountIdFromUid(callingAppUid);
 
 #ifdef L2_STANDARD
     HksClearThreadErrorMsg();
     constexpr unsigned int DEFAULT_TIMEOUT = 5U; // seconds
-    HksXCollie hksXCollie(GetTimeoutMonitorMarkTag(code, callingUid), DEFAULT_TIMEOUT, [](void *)->void {}, nullptr,
+    HksXCollie hksXCollie(GetTimeoutMonitorMarkTag(code, callingAppUid), DEFAULT_TIMEOUT, [](void *)->void {}, nullptr,
         HiviewDFX::XCOLLIE_FLAG_LOG);
 #endif
 
-    HKS_LOG_I("code:%" LOG_PUBLIC "u, callingUid = %" LOG_PUBLIC "d, userId = %" LOG_PUBLIC
-        "d, sessionId = %" LOG_PUBLIC "u", code, callingUid, userId, currentSessionId);
+    HKS_LOG_I("code:%" LOG_PUBLIC "u, callingAppUid = %" LOG_PUBLIC "d, userId = %" LOG_PUBLIC
+        "d, sessionId = %" LOG_PUBLIC "u", code, callingAppUid, userId, currentSessionId);
 
 #ifdef HUKS_ENABLE_UPGRADE_KEY_STORAGE_SECURE_LEVEL
     // judge whether is upgrading, wait for upgrade finished

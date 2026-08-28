@@ -24,7 +24,7 @@ extern "C" {
 
 struct EventValues {
     uint32_t userId;
-    uint32_t processName;
+    uint32_t processAppUid;
     uint32_t keyType;
     int32_t errorCode;
 };
