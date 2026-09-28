@@ -75,8 +75,8 @@ int32_t HksServiceSetOrGetRemoteProperty(const struct HksProcessInfo *processInf
 int32_t HksServiceGetResourceId(const struct HksProcessInfo *processInfo, const struct HksBlob *providerName,
     const struct HksParamSet *paramSetIn, struct HksBlob *resourceId, struct HksExternalErrorInfo **errInfo);
 
-int32_t HksServiceQueryAbilityInfo(const struct HksProcessInfo *processInfo, struct HksBlob *resourceId,
-    struct HksAbilityInfo *abilityInfo);
+int32_t HksServiceQueryAbilityInfo(const struct HksProcessInfo *processInfo, const struct HksParamSet *paramSetIn,
+    struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo);
 
 int32_t HksServiceImportCert(const struct HksProcessInfo *processInfo, const struct HksBlob *index,
     const struct HksExtCertInfo *certInfo, const struct HksParamSet *paramSet, struct HksExternalErrorInfo **errInfo);

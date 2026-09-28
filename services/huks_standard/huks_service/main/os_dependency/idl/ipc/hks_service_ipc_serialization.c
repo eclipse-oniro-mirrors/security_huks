@@ -208,6 +208,26 @@ int32_t HksUKeyGeneralUnpack(const struct HksBlob *srcData, struct HksBlob *blob
     return HKS_SUCCESS;
 }
 
+int32_t HksBlob3ParamSetUnpack(const struct HksBlob *srcData, struct HksBlob *blob1,
+    struct HksBlob *blob2, struct HksBlob *blob3, struct HksParamSet **paramSet)
+{
+    uint32_t offset = 0;
+    int32_t ret;
+    do {
+        ret = GetBlobFromBuffer(blob1, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob1 failed!");
+        ret = GetBlobFromBuffer(blob2, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob2 failed!");
+        ret = GetBlobFromBuffer(blob3, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob3 failed!");
+        if (offset < srcData->size && paramSet != NULL) {
+            ret = GetParamSetFromBuffer(paramSet, srcData, &offset);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get paramSet failed!");
+        }
+    } while (0);
+    return ret;
+}
+
 int32_t HksSetOrGetRemotePropertyUnpack(const struct HksBlob *srcData,
     enum HksExtPropertyOperation *operation, struct HksBlob *blob1,
     struct HksBlob *blob2, struct HksParamSet **paramSet)

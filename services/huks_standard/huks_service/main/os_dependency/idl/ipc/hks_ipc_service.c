@@ -201,19 +201,24 @@ void HksIpcServiceQueryAbilityInfo(const struct HksBlob *srcData, const uint8_t 
     struct HksBlob resourceId = { 0, NULL };
     struct HksAbilityInfo abilityInfo = {};
     struct HksProcessInfo processInfo = HKS_PROCESS_INFO_INIT_VALUE;
+    struct HksParamSet *paramSet = NULL;
     struct HksBlob outBlob = { 0, NULL };
     uint32_t abilityType = 0;
     int32_t ret;
 
     do {
-        ret = HksBlob3AndUint32Unpack(srcData, &resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName,
-            &abilityType);
+        ret = HksBlob3ParamSetUnpack(srcData, &resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName, &paramSet);
         HKS_IF_NOT_SUCC_BREAK(ret, "HksIpcServiceQueryAbilityInfo Ipc fail")
 
-        ret = HksGetProcessInfoForIPC(NULL, context, &processInfo);
+        ret = HksGetProcessInfoForIPC(paramSet, context, &processInfo);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksGetProcessInfoForIPC fail, ret = %" LOG_PUBLIC "d", ret)
 
-        ret = HksIpcQueryAbilityInfoAdapter(&processInfo, &resourceId, &abilityInfo);
+        if (paramSet != NULL) {
+            ret = HksCheckAcrossAccountsPermission(paramSet, processInfo.userIdInt);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksCheckAcrossAccountsPermission fail, ret = %" LOG_PUBLIC "d", ret)
+        }
+
+        ret = HksIpcQueryAbilityInfoAdapter(&processInfo, paramSet, &resourceId, &abilityInfo);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksIpcQueryAbilityInfoAdapter fail, ret = %" LOG_PUBLIC "d", ret)
 
         ret = HksAllocInBlobWithThreeBlobsAndUint32(&outBlob, &resourceId, &abilityInfo.bundleName,
@@ -230,6 +235,7 @@ void HksIpcServiceQueryAbilityInfo(const struct HksBlob *srcData, const uint8_t 
     HKS_FREE_BLOB(processInfo.processName);
     HKS_FREE_BLOB(processInfo.userId);
     HKS_FREE_BLOB(outBlob);
+    HksFreeParamSet(&paramSet);
 
 #else
     (void)srcData;

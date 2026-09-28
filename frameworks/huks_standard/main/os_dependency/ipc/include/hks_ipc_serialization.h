@@ -47,6 +47,12 @@ int32_t HksBlob3AndUint32Unpack(const struct HksBlob *srcData, struct HksBlob *b
 int32_t HksBlob3AndUint32Pack(const struct HksBlob *blob1, const struct HksBlob *blob2,
     const struct HksBlob *blob3, uint32_t value, struct HksBlob *destData);
 
+int32_t HksAllocInBlobWithThreeBlobsAndParamSet(struct HksBlob *inBlob, const struct HksBlob *blob1,
+    const struct HksBlob *blob2, const struct HksBlob *blob3, const struct HksParamSet *paramSet);
+
+int32_t HksBlob3ParamSetPack(const struct HksBlob *blob1, const struct HksBlob *blob2,
+    const struct HksBlob *blob3, const struct HksParamSet *paramSet, struct HksBlob *destData);
+
 #ifdef __cplusplus
 }
 #endif

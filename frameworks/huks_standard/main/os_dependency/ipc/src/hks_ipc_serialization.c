@@ -95,6 +95,44 @@ int32_t HksBlob3Unpack(const struct HksBlob *srcData, struct HksBlob *blob1,
     return ret;
 }
 
+int32_t HksAllocInBlobWithThreeBlobsAndParamSet(struct HksBlob *inBlob, const struct HksBlob *blob1,
+    const struct HksBlob *blob2, const struct HksBlob *blob3, const struct HksParamSet *paramSet)
+{
+    if (inBlob == NULL || blob1 == NULL || blob2 == NULL || blob3 == NULL) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    uint32_t size = (uint32_t)(sizeof(blob1->size) + ALIGN_SIZE(blob1->size));
+    size += (uint32_t)(sizeof(blob2->size) + ALIGN_SIZE(blob2->size));
+    size += (uint32_t)(sizeof(blob3->size) + ALIGN_SIZE(blob3->size));
+    if (paramSet != NULL) {
+        size += ALIGN_SIZE(paramSet->paramSetSize);
+    }
+    inBlob->data = (uint8_t *)HksMalloc(size);
+    HKS_IF_NULL_LOGE_RETURN(inBlob->data, HKS_ERROR_MALLOC_FAIL, "malloc inBlob fail");
+    inBlob->size = size;
+    return HKS_SUCCESS;
+}
+
+int32_t HksBlob3ParamSetPack(const struct HksBlob *blob1, const struct HksBlob *blob2,
+    const struct HksBlob *blob3, const struct HksParamSet *paramSet, struct HksBlob *destData)
+{
+    uint32_t offset = 0;
+    int32_t ret;
+    do {
+        ret = CopyBlobToBuffer(blob1, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob1 failed");
+        ret = CopyBlobToBuffer(blob2, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob2 failed");
+        ret = CopyBlobToBuffer(blob3, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob3 failed");
+        if (paramSet != NULL) {
+            ret = CopyParamSetToBuffer(paramSet, destData, &offset);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy paramSet failed");
+        }
+    } while (0);
+    return ret;
+}
+
 int32_t HksBlob3Pack(const struct HksBlob *blob1, const struct HksBlob *blob2,
     const struct HksBlob *blob3, struct HksBlob *destData)
 {

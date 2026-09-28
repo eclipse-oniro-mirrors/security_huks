@@ -75,8 +75,8 @@ int32_t HksIpcProviderUnregAdapter(const struct HksProcessInfo *processInfo, con
     return pluginManager->UnRegisterProvider(*processInfo, cppresourceId, cppParamSet, isDeath);
 }
 
-int32_t HksIpcQueryAbilityInfoAdapter(const struct HksProcessInfo *processInfo, struct HksBlob *resourceId,
-    HksAbilityInfo *abilityInfo)
+int32_t HksIpcQueryAbilityInfoAdapter(const struct HksProcessInfo *processInfo, const struct HksParamSet *paramSetIn,
+    struct HksBlob *resourceId, HksAbilityInfo *abilityInfo)
 {
     int32_t ret = HksIpcCheckBlob(&abilityInfo->abilityName, 1, HKS_EXT_MAX_PROVIDER_NAME_LEN);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "invalid abilityName blob")

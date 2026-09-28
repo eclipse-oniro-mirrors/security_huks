@@ -30,7 +30,8 @@ int32_t HksClientRefreshKeyInfo(void);
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
 int32_t HksClientRegisterProvider(const struct HksBlob *name, const struct HksParamSet *paramSetIn);
 int32_t HksClientUnregisterProvider(const struct HksBlob *name, const struct HksParamSet *paramSetIn);
-int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo);
+int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
+    struct HksAbilityInfo *abilityInfo);
 
 int32_t HksClientExportProviderCertificates(const struct HksBlob *providerName,
     const struct HksParamSet *paramSetIn, struct HksExtCertInfoSet *certSet);

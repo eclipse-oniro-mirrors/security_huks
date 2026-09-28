@@ -27,8 +27,8 @@ int32_t HksIpcProviderRegAdapter(const struct HksProcessInfo *processInfo, const
     const struct HksParamSet *paramSet);
 int32_t HksIpcProviderUnregAdapter(const struct HksProcessInfo *processInfo, const struct HksBlob *name,
     const struct HksParamSet *paramSet);
-int32_t HksIpcQueryAbilityInfoAdapter(const struct HksProcessInfo *processInfo, struct HksBlob *resourceId,
-    struct HksAbilityInfo *abilityInfo);
+int32_t HksIpcQueryAbilityInfoAdapter(const struct HksProcessInfo *processInfo, const struct HksParamSet *paramSetIn,
+    struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo);
 int32_t HksIpcCreateRemKeyHandleAdapter(const struct HksProcessInfo *processInfo, const struct HksBlob *resourceId,
     const struct HksParamSet *paramSet, struct HksExternalErrorInfo **errInfo);
 int32_t HksIpcCloseRemKeyHandleAdapter(const struct HksProcessInfo *processInfo, const struct HksBlob *resourceId,

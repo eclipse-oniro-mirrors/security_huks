@@ -273,7 +273,8 @@ int32_t HksClientGetResourceId(const struct HksBlob *providerName, const struct 
     return ret;
 }
 
-int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo)
+int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
+    struct HksAbilityInfo *abilityInfo)
 {
     struct HksProcessInfo processInfo = {
         { 0, NULL },
@@ -283,7 +284,7 @@ int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityI
         0,
         0
     };
-    int32_t ret = HksServiceQueryAbilityInfo(&processInfo, resourceId, abilityInfo);
+    int32_t ret = HksServiceQueryAbilityInfo(&processInfo, paramSetIn, resourceId, abilityInfo);
     return ret;
 }
 
