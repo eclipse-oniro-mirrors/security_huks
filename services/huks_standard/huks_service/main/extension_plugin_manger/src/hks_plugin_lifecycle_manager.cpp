@@ -210,7 +210,7 @@ struct AutoRefCount {
 };
 
 ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId,
-    CppAbilityInfo &abilityInfo))
+    const CppParamSet &paramSet, CppAbilityInfo &abilityInfo))
 {
     AutoRefCount refCnt(m_refCount, soMutex);
     void *funcPtr = nullptr;

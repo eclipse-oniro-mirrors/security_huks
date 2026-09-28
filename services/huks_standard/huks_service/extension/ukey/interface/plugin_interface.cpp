@@ -66,12 +66,12 @@ __attribute__((visibility("default"))) int32_t HksExtPluginOnRegisterProvider(co
 }
 
 __attribute__((visibility("default"))) int32_t HksExtPluginOnQueryAbilityInfo(const struct HksProcessInfo &processInfo,
-    std::string &resourceId, CppAbilityInfo &abilityInfo)
+    std::string &resourceId, const CppParamSet &paramSet, CppAbilityInfo &abilityInfo)
 {
     HKS_LOG_I("enter %" LOG_PUBLIC "s", __PRETTY_FUNCTION__);
     auto providerMgr = HksProviderLifeCycleManager::GetInstanceWrapper();
     HKS_IF_TRUE_LOGE_RETURN(providerMgr == nullptr, HKS_ERROR_NULL_POINTER, "providerMgr is null");
-    auto ret = providerMgr->OnQueryAbility(processInfo, resourceId, abilityInfo);
+    auto ret = providerMgr->OnQueryAbility(processInfo, resourceId, paramSet, abilityInfo);
     HKS_LOG_I("leave %" LOG_PUBLIC "s, ret = %" LOG_PUBLIC "d", __FUNCTION__, ret);
     return ret;
 }

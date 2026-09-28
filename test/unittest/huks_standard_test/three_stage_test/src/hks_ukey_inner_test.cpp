@@ -151,7 +151,7 @@ HWTEST_F(HksUKeyInnerTest, HksUKeyInnerTest001, TestSize.Level0)
     tmp.bundleName.data = (uint8_t*)HksMalloc(128);
     tmp.bundleName.size = 128;
     HksBlob resourceBlob = StringToHuksBlob(resourceId.data());
-    int32_t ret = HksQueryAbilityInfo(&resourceBlob, &tmp);
+    int32_t ret = HksQueryAbilityInfo(&resourceBlob, NULL, &tmp);
     HKS_IF_NOT_SUCC_LOGE(ret, "query fail");
 
     HKS_LOG_I("bundleName:%" LOG_PUBLIC "s, uiAbilityName: %" LOG_PUBLIC "s, index: %" LOG_PUBLIC "s",

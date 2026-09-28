@@ -44,7 +44,7 @@ void DoSomethingInterestingWithMyAPI(const uint8_t *data, size_t size)
     struct HksBlob resourceId = { resourceIdSize, resourceIdBuf.data() };
     struct HksAbilityInfo abilityInfo = {};
 
-    [[maybe_unused]] int ret = HksQueryAbilityInfo(&resourceId, &abilityInfo);
+    [[maybe_unused]] int ret = HksQueryAbilityInfo(&resourceId, NULL, &abilityInfo);
 }
 }}}
 

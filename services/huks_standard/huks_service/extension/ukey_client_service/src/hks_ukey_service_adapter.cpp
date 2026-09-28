@@ -86,10 +86,11 @@ int32_t HksIpcQueryAbilityInfoAdapter(const struct HksProcessInfo *processInfo, 
 
     std::string cppResourceId(reinterpret_cast<const char*>(resourceId->data), resourceId->size);
     CppAbilityInfo cppAbilityInfo(abilityInfo);
+    CppParamSet cppParamSet(paramSetIn);
 
     auto pluginManager = OHOS::Security::Huks::HuksPluginLifeCycleMgr::GetInstanceWrapper();
     HKS_IF_TRUE_LOGE_RETURN(pluginManager == nullptr, HKS_ERROR_NULL_POINTER, "Failed to get PluginManager instance.")
-    ret = pluginManager->OnQueryAbility(*processInfo, cppResourceId, cppAbilityInfo);
+    ret = pluginManager->OnQueryAbility(*processInfo, cppResourceId, cppParamSet, cppAbilityInfo);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "OnQueryAbility fail")
 
     HKS_IF_TRUE_LOGE_RETURN(abilityInfo->abilityName.size < cppAbilityInfo.abilityName.size(),
