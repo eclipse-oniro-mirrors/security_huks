@@ -418,7 +418,8 @@ HWTEST_F(HksProviderMgrTest, HksProviderMgrTest010, TestSize.Level0) {
     std::string resourceId = "{\"providerName\":\"HksProviderMgrTest006\",\"abilityName\":\"HiTaiCryptoAbility\""
         ",\"bundleName\":\"com.huawei.extensionhap.test\",\"index\":\"key1\"}";
     CppAbilityInfo abilityInfo{};
-    ret = providerMgr->OnQueryAbility(processInfo, resourceId, abilityInfo);
+    CppParamSet cppParamSet{};
+    ret = providerMgr->OnQueryAbility(processInfo, resourceId, cppParamSet, abilityInfo);
     EXPECT_EQ(ret, HKS_SUCCESS) << "OnQueryAbility failed";
     EXPECT_EQ(abilityInfo.abilityName, "UiAbility1") << "abilityName mismatch";
     EXPECT_EQ(abilityInfo.abilityType, 1) << "abilityType mismatch";
@@ -640,7 +641,8 @@ HWTEST_F(HksProviderMgrTest, HksProviderMgrTest015, TestSize.Level0) {
     std::string resourceId = "{\"providerName\":\"HksProviderMgrTest011\",\"abilityName\":\"HiTaiCryptoAbility\""
         ",\"bundleName\":\"com.huawei.extensionhap.test\",\"index\":\"key1\"}";
     CppAbilityInfo abilityInfo{};
-    ret = providerMgr->OnQueryAbility(processInfo, resourceId, abilityInfo);
+    CppParamSet cppParamSet{};
+    ret = providerMgr->OnQueryAbility(processInfo, resourceId, cppParamSet, abilityInfo);
     EXPECT_EQ(ret, HKS_SUCCESS) << "OnQueryAbility failed";
 
     int32_t deleteCount = 0;

@@ -218,7 +218,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnQueryAbility(const HksProcessInfo &
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "OnQueryAbility method enum not found in plugin provider map.")
 
-    int32_t ret = (*reinterpret_cast<OnQueryAbilityFunc>(funcPtr))(processInfo, resourceId, abilityInfo);
+    int32_t ret = (*reinterpret_cast<OnQueryAbilityFunc>(funcPtr))(processInfo, resourceId, paramSet, abilityInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "OnQueryAbility fail, ret = %{public}d", ret)
     HKS_LOG_I("query ability success");
     return HKS_SUCCESS;
