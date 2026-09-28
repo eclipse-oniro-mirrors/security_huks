@@ -79,7 +79,7 @@ HKS_API_EXPORT int32_t HksGetParam(const struct HksParamSet *paramSet, uint32_t 
 
 #ifndef HKS_CHIPSET_API
 /**
- * @brief Add parameter set and filter in black list way
+ * @brief Add parameter set and filter in block list way
  * @param paramSet required parameter set
  * @param params params need to add
  *

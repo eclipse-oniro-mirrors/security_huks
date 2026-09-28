@@ -1291,7 +1291,7 @@ HWTEST_F(HksKemTest, HKS_FREE_ENCAPSULATION_RESULT_002, TestSize.Level0)
     EXPECT_EQ(encapResult.sharedSecret.size, 0);
 }
 
-// decapsulate with forbidden tag in sharedKeyParamSet, trigger IPC blacklist failure path
+// decapsulate with forbidden tag in sharedKeyParamSet, trigger IPC blocklist failure path
 // verifies deep-copied encapOrsharedSecret can be safely freed without double-free
 HWTEST_F(HksKemTest, HksDecapsulate_DoubleFree_001, TestSize.Level0)
 {

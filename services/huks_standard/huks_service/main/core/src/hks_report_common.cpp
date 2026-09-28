@@ -152,7 +152,7 @@ int32_t AddTimeCost(struct HksParamSet *paramSetOut, uint64_t startTime)
     return ret;
 }
 
-/* Whitelist of tags from paramSetIn that are safe and needed for event reporting.
+/* Trustlist of tags from paramSetIn that are safe and needed for event reporting.
    Only key property tags are allowed; internal PARAM* tags used by the report
    framework itself are excluded to prevent client-side parameter injection. */
 static const uint32_t REPORT_ALLOWED_TAGS[] = {
@@ -210,7 +210,7 @@ int32_t PreAddCommonInfo(struct HksParamSet *paramSetOut, const struct HksBlob *
     ret = AddKeyAliasHash(paramSetOut, keyAlias, HKS_TAG_PARAM4_UINT32);
     HKS_IF_NOT_SUCC_LOGI_RETURN(ret, ret, "add kayAlias hash to paramSetOut failed!")
 
-    /* Only copy whitelisted key property tags, not all client params, to prevent injection */
+    /* Only copy trustlisted key property tags, not all client params, to prevent injection */
     ret = AddFilteredParams(paramSetOut, paramSetIn);
     HKS_IF_NOT_SUCC_LOGI_RETURN(ret, ret, "add filtered paramSetIn params to paramSetOut failed!")
 
