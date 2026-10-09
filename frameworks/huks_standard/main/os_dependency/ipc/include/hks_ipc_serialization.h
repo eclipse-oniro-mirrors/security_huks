@@ -38,6 +38,15 @@ int32_t GetBlobFromBuffer(struct HksBlob *blob, const struct HksBlob *srcBlob, u
 int32_t HksBlob3Pack(const struct HksBlob *blob1, const struct HksBlob *blob2,
     const struct HksBlob *blob3, struct HksBlob *destData);
 
+int32_t HksAllocInBlobWithThreeBlobsAndUint32(struct HksBlob *inBlob, const struct HksBlob *blob1,
+    const struct HksBlob *blob2, const struct HksBlob *blob3, uint32_t value);
+
+int32_t HksBlob3AndUint32Unpack(const struct HksBlob *srcData, struct HksBlob *blob1,
+    struct HksBlob *blob2, struct HksBlob *blob3, uint32_t *value);
+
+int32_t HksBlob3AndUint32Pack(const struct HksBlob *blob1, const struct HksBlob *blob2,
+    const struct HksBlob *blob3, uint32_t value, struct HksBlob *destData);
+
 #ifdef __cplusplus
 }
 #endif

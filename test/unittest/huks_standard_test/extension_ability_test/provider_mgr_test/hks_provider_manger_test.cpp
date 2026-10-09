@@ -38,11 +38,6 @@ static int32_t SetupProvider(std::shared_ptr<HksProviderLifeCycleManager> provid
     std::function<void(HksProcessInfo)> callback)
 {
     auto ret = providerMgr->OnRegisterProvider(processInfo, providerName, paramSet, callback);
-    if (ret != HKS_SUCCESS) {
-        return ret;
-    }
-    sptr<IRemoteObject> remoteObj = CreateMockRemoteObject();
-    ret = providerMgr->OnSetExtensionProxy(processInfo, providerName, paramSet, remoteObj);
     return ret;
 }
 
@@ -403,7 +398,7 @@ HWTEST_F(HksProviderMgrTest, HksProviderMgrTest010, TestSize.Level0) {
     auto mockProccess = std::make_shared<HksMockHapToken>(bundleName, reqPerm, true);
     EXPECT_NE(mockProccess, nullptr) << "mockProccess is null";
 
-    std::string abilityInfoString = "[{\"abilityName\":\"UiAbility1\",\"index\":\"key1\"}]";
+    std::string abilityInfoString = "[{\"abilityName\":\"UiAbility1\",\"index\":\"key1\",\"abilityType\":1}]";
     HksProcessInfo processInfo{};
     HksGetProcessInfoForIPC(&processInfo);
     std::vector<HksParam> params = {
@@ -425,6 +420,8 @@ HWTEST_F(HksProviderMgrTest, HksProviderMgrTest010, TestSize.Level0) {
     CppAbilityInfo abilityInfo{};
     ret = providerMgr->OnQueryAbility(processInfo, resourceId, abilityInfo);
     EXPECT_EQ(ret, HKS_SUCCESS) << "OnQueryAbility failed";
+    EXPECT_EQ(abilityInfo.abilityName, "UiAbility1") << "abilityName mismatch";
+    EXPECT_EQ(abilityInfo.abilityType, 1) << "abilityType mismatch";
 
     int32_t deleteCount = 0;
     ret = providerMgr->OnUnRegisterProvider(processInfo, providerName, paramSet, false, deleteCount);

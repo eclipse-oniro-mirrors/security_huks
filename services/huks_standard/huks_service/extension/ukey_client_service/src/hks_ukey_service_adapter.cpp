@@ -107,6 +107,7 @@ int32_t HksIpcQueryAbilityInfoAdapter(const struct HksProcessInfo *processInfo, 
         cppAbilityInfo.bundleName.data(), cppAbilityInfo.bundleName.size());
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INSUFFICIENT_MEMORY, "copy bundle name fail")
     abilityInfo->bundleName.size = cppAbilityInfo.bundleName.size();
+    abilityInfo->abilityType = cppAbilityInfo.abilityType;
 
     (void)memset_s(resourceId->data, resourceId->size, 0, resourceId->size);
     HKS_IF_TRUE_LOGE_RETURN(resourceId->size < cppResourceId.size(), HKS_ERROR_INSUFFICIENT_MEMORY,

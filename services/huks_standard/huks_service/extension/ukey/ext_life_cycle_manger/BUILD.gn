@@ -28,16 +28,19 @@ if (os_level == "standard") {
       "inc",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common/inc",
       "//base/security/huks/services/huks_standard/huks_service/main/systemapi_wrap/bms/include",
+      "//base/security/huks/services/huks_standard/huks_service/extension/ukey/connection/inc",
     ]
 
     sources = [
       "src/hks_provider_life_cycle_manager.cpp",
+      "src/hks_ukey_provider_proxy_resolver.cpp",
     ]
 
     defines = [ "L2_STANDARD" ]
     deps = [
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common:libhuks_ukey_common_static",
       "//base/security/huks/services/huks_standard/huks_service/main/systemapi_wrap/bms:libhuks_bms_systemapi_wrap_static",
+      "//base/security/huks/services/huks_standard/huks_service/extension/ukey/connection:libhuks_extension_connection_static",
     ]
     cflags = []
 
@@ -53,6 +56,7 @@ if (os_level == "standard") {
     }
 
     external_deps = [
+      "ability_runtime:ability_connect_callback_stub",
       "ability_runtime:app_manager",
       "bundle_framework:appexecfwk_base",
       "bundle_framework:appexecfwk_core",

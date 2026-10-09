@@ -210,6 +210,7 @@ static void AddHuksTagPart3(napi_env env, napi_value tag)
 
     // UKEY
     AddInt32Property(env, tag, "HUKS_TAG_KEY_CLASS", HKS_TAG_KEY_CLASS);
+    AddInt32Property(env, tag, "HUKS_TAG_TIME_OUT", HKS_TAG_TIME_OUT);
 
     /* ExtensionAbility TAGs moved to external crypto (ukey) module */
 }

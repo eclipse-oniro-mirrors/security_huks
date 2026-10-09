@@ -66,14 +66,45 @@ int HksGetOsAccountIdFromUid(int uid)
 #endif // HAS_OS_ACCOUNT_PART
 }
 
-void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlob *response)
-{
-    if (context == nullptr) {
-        HKS_LOG_E("SendResponse NULL Pointer");
-        return;
-    }
+// ukey async refactor: thread-local async result slot (see the comment in hks_response.h)
+static __thread struct HksAsyncResultSlot g_asyncResultSlot = { false, false, 0, { 0, nullptr } };
 
-    MessageParcel *reply = const_cast<MessageParcel *>(reinterpret_cast<const MessageParcel *>(context));
+void HksAsyncResultSlotSetEnabled(bool enabled)
+{
+    if (enabled) {
+        // new task begins: clear the previous task's residue (Take already resets on the normal
+        // path; this is a defensive extra clear)
+        if (g_asyncResultSlot.captured && g_asyncResultSlot.response.data != nullptr) {
+            HKS_FREE_BLOB(g_asyncResultSlot.response);
+        }
+        g_asyncResultSlot.captured = false;
+        g_asyncResultSlot.result = 0;
+        g_asyncResultSlot.response.size = 0;
+        g_asyncResultSlot.response.data = nullptr;
+    }
+    g_asyncResultSlot.enabled = enabled;
+}
+
+void HksAsyncResultSlotTake(int32_t *result, struct HksBlob *response)
+{
+    if (result != nullptr) {
+        *result = g_asyncResultSlot.result;
+    }
+    if (response != nullptr) {
+        *response = g_asyncResultSlot.response; // ownership transfer
+    }
+    // reset (response ownership has been transferred to the caller; nothing is released here)
+    g_asyncResultSlot.captured = false;
+    g_asyncResultSlot.enabled = false;
+    g_asyncResultSlot.result = 0;
+    g_asyncResultSlot.response.size = 0;
+    g_asyncResultSlot.response.data = nullptr;
+}
+
+// sync path: writes the result into the IPC reply parcel (context is non-null, reachable only
+// on the IPC thread)
+static void HksWriteResponseToParcel(MessageParcel *reply, int32_t result, const struct HksBlob *response)
+{
     HKS_IF_NOT_TRUE_LOGE_RETURN_VOID(reply->WriteInt32(result), "reply->WriteInt32(result) failed");
 
     if (response == nullptr) {
@@ -113,6 +144,46 @@ void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlo
 #endif
 }
 
+// ukey async refactor: captures the worker thread's business-final result into the thread-local
+// slot (the HksSendResponse null-context branch). The first capture wins: HksIpcServiceXxx may
+// be called multiple times internally, so the first complete answer is taken; empty output does
+// not write slot data (the slot keeps data=nullptr/size=0, consistent with HksAsyncResultSlotTake)
+static void HksCaptureAsyncResult(int32_t result, const struct HksBlob *response)
+{
+    if (g_asyncResultSlot.captured) {
+        return;
+    }
+    g_asyncResultSlot.captured = true;
+    g_asyncResultSlot.result = result;
+    if (response == nullptr || response->data == nullptr || response->size == 0) {
+        return;
+    }
+    uint8_t *buf = static_cast<uint8_t *>(HksMalloc(response->size));
+    if (buf == nullptr) {
+        HKS_LOG_E("async result slot malloc fail, size=%" LOG_PUBLIC "u", response->size);
+        return;
+    }
+    (void)memcpy_s(buf, response->size, response->data, response->size);
+    g_asyncResultSlot.response.data = buf;
+    g_asyncResultSlot.response.size = response->size;
+}
+
+void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlob *response)
+{
+    // ukey async refactor: when a worker thread runs the task, context is null — the result is
+    // written into the thread-local slot instead of a parcel (the first capture wins: the
+    // business-final first complete answer)
+    if (context == nullptr) {
+        if (g_asyncResultSlot.enabled) {
+            HksCaptureAsyncResult(result, response);
+        }
+        return;
+    }
+
+    MessageParcel *reply = const_cast<MessageParcel *>(reinterpret_cast<const MessageParcel *>(context));
+    HksWriteResponseToParcel(reply, result, response);
+}
+
 static int32_t GetUidAndUserId(const struct HksParamSet *paramSet, int &uid, int &userId)
 {
     auto callingUid = IPCSkeleton::GetCallingUid();
@@ -140,12 +211,72 @@ static int32_t GetUidAndUserId(const struct HksParamSet *paramSet, int &uid, int
     return HKS_SUCCESS;
 }
 
-int32_t HksGetProcessInfoForIPC(const struct HksParamSet *paramSet,
-    const uint8_t *context, struct HksProcessInfo *processInfo)
+// ukey async refactor: thread-local identity slot — when a worker thread runs a task, the task
+// already carries the caller identity resolved in advance by the IPC thread (deep-copied);
+// HksGetProcessInfoForIPC copies the identity from this slot when it detects the thread slot is
+// online (the worker has no IPC context, so IPCSkeleton's thread-local is untrustworthy here)
+static __thread const struct HksProcessInfo *g_threadIdentityOverride = nullptr;
+
+// the caller's full tokenIDEx when a worker thread runs the task (captured and injected by the
+// IPC thread on admission); 0 = not injected
+static __thread uint64_t g_threadFullTokenIdOverride = 0;
+
+void HksSetThreadFullTokenIdOverride(uint64_t fullTokenId)
 {
-    HKS_IF_NULL_RETURN(context, HKS_SUCCESS);
-    HKS_IF_NULL_RETURN(processInfo, HKS_SUCCESS);
-    
+    g_threadFullTokenIdOverride = fullTokenId;
+}
+
+uint64_t HksGetThreadFullTokenIdOverride()
+{
+    return g_threadFullTokenIdOverride;
+}
+
+void HksSetThreadIdentityOverride(const struct HksProcessInfo *processInfo)
+{
+    g_threadIdentityOverride = processInfo;
+}
+
+const struct HksProcessInfo *HksGetThreadIdentityOverride()
+{
+    return g_threadIdentityOverride;
+}
+
+// worker thread (during task execution): deep-copies the identity held by the task (malloc
+// semantics match the IPC path below; the caller releases it with HKS_FREE_BLOB)
+static int32_t HksGetProcessInfoFromThreadSlot(struct HksProcessInfo *processInfo)
+{
+    const struct HksProcessInfo *src = g_threadIdentityOverride;
+    uint32_t uidLen = sizeof(int);
+    uint8_t *uidName = static_cast<uint8_t *>(HksMalloc(uidLen));
+    uint8_t *userName = nullptr;
+    if (uidName == nullptr) {
+        return HKS_ERROR_MALLOC_FAIL;
+    }
+    (void)memcpy_s(uidName, uidLen, src->processName.data, uidLen);
+    uint32_t userSize = src->userId.size;
+    userName = static_cast<uint8_t *>(HksMalloc(userSize > 0 ? userSize : 1));
+    if (userName == nullptr) {
+        HKS_FREE(uidName);
+        return HKS_ERROR_MALLOC_FAIL;
+    }
+    if (userSize > 0) {
+        (void)memcpy_s(userName, userSize, src->userId.data, userSize);
+    }
+    processInfo->processName.size = uidLen;
+    processInfo->processName.data = uidName;
+    processInfo->uidInt = src->uidInt;
+    processInfo->userId.size = userSize;
+    processInfo->userId.data = userName;
+    processInfo->userIdInt = src->userIdInt;
+    processInfo->accessTokenId = src->accessTokenId;
+    processInfo->pid = src->pid;
+    return HKS_SUCCESS;
+}
+
+// IPC thread: resolves the caller identity from IPCSkeleton (sync path; malloc semantics match
+// the thread-slot path)
+static int32_t HksGetProcessInfoFromIpc(const struct HksParamSet *paramSet, struct HksProcessInfo *processInfo)
+{
     int uid = -1;
     int userId = -1;
     int32_t ret = GetUidAndUserId(paramSet, uid, userId);
@@ -193,6 +324,21 @@ int32_t HksGetProcessInfoForIPC(const struct HksParamSet *paramSet,
     return ret;
 }
 
+int32_t HksGetProcessInfoForIPC(const struct HksParamSet *paramSet,
+    const uint8_t *context, struct HksProcessInfo *processInfo)
+{
+    HKS_IF_NULL_RETURN(processInfo, HKS_SUCCESS);
+    // worker thread (during task execution): the identity slot is online (the task holds the
+    // caller identity resolved in advance by the IPC thread). This function only transfers
+    // pointer ownership to the out-param — malloc semantics match the IPC path below; the
+    // caller releases it with HKS_FREE_BLOB
+    if (g_threadIdentityOverride != nullptr) {
+        return HksGetProcessInfoFromThreadSlot(processInfo);
+    }
+    HKS_IF_NULL_RETURN(context, HKS_SUCCESS);
+    return HksGetProcessInfoFromIpc(paramSet, processInfo);
+}
+
 int32_t HksCheckIsFrontUser(int32_t userId, bool *isFrontUser)
 {
 #ifdef HAS_OS_ACCOUNT_PART
@@ -210,7 +356,7 @@ int32_t HksGetRelatedFrontUserId(const struct HksParamSet *paramSet, int32_t ipc
 {
 #ifdef HAS_OS_ACCOUNT_PART
     if (ipcCallerUserId >= HKS_ROOT_USER_UPPERBOUND) {
-        // 普通应用返回应用所属userid
+        // a normal app returns the userid it belongs to
         *outId = ipcCallerUserId;
         return HKS_SUCCESS;
     }
@@ -221,7 +367,8 @@ int32_t HksGetRelatedFrontUserId(const struct HksParamSet *paramSet, int32_t ipc
         *outId = specificUserId->int32Param;
         return HKS_SUCCESS;
     } else if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
-        // 系统应用不指定userid时默认返回逻辑主屏userid
+        // a system app returns the logical home-screen userid by default when it does not
+        // specify a userid
         int32_t localId = INVALID_USER_ID;
         ret = OHOS::AccountSA::OsAccountManager::GetForegroundOsAccountLocalId(localId);
         HKS_IF_TRUE_LOGE_RETURN(ret != ERR_OK, ret,

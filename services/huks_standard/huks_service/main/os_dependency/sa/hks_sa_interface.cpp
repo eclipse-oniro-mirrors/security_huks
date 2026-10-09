@@ -161,6 +161,8 @@ HksExtStub::~HksExtStub()
 void HksExtStub::SendAsyncReply(uint32_t errCode, std::unique_ptr<uint8_t[]> &sendData, uint32_t sendSize,
     uint32_t msgCode, const struct HksExternalErrorInfo *errInfo)
 {
+    HKS_LOG_I("ukey client stub got reply, msgCode=%{public}u errCode=%{public}u size=%{public}u",
+        msgCode, errCode, sendSize);
     std::unique_lock<std::mutex> lck(mMutex);
     received = true;
     mErrCode = errCode;
@@ -176,23 +178,22 @@ void HksExtStub::SendAsyncReply(uint32_t errCode, std::unique_ptr<uint8_t[]> &se
     mCv.notify_all();
 }
 
-int HksExtStub::ProcessExtGetRemotePropertyReply(MessageParcel& data)
+// Unified reply success-path parsing (protocol: [errCode, size, data?, errVal, descLen,
+// hasErrorInfo, desc]): size may be 0 (no-output operation); the server writes data with
+// WriteBuffer and then 4-byte padding is added, so ReadUnpadBuffer must be used here to skip
+// the padding, otherwise the subsequent errVal/descLen/hasErrorInfo parsing misaligns
+static int32_t ReadAsyncReplyData(MessageParcel &data, std::unique_ptr<uint8_t[]> &receivedData,
+    uint32_t &receivedSize)
 {
-    std::unique_ptr<uint8_t[]> receivedData{};
-    uint32_t errCode = 1;
-    if (!data.ReadUint32(errCode) || errCode != HKS_SUCCESS) {
-        HKS_LOG_E("ipc client read errCode %" LOG_PUBLIC "u", errCode);
-        struct HksExternalErrorInfo errInfo = {errCode, nullptr, 0, false};
-        SendAsyncReply(errCode, receivedData, 0, HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY_REPLY, &errInfo);
-        return ERR_INVALID_DATA;
-    }
-    uint32_t receivedSize = 0;
-    int err = ERR_INVALID_DATA;
+    int err = ERR_OK;
     do {
         uint32_t size = 0;
-        HKS_IF_TRUE_LOGE_BREAK(!data.ReadUint32(size) || size == 0 || size > MAX_OUT_BLOB_SIZE,
+        HKS_IF_TRUE_LOGE_BREAK(!data.ReadUint32(size) || size > MAX_OUT_BLOB_SIZE,
             "invalid size %" LOG_PUBLIC "u", size)
-        const uint8_t *ptr = data.ReadBuffer(size);
+        if (size == 0) {
+            break; // success with no output: valid
+        }
+        const uint8_t *ptr = data.ReadUnpadBuffer(size);
         HKS_IF_NULL_LOGE_BREAK(ptr, "ReadBuffer %" LOG_PUBLIC "u size ptr is nullptr", size)
         auto receivedPtr = std::make_unique<uint8_t[]>(size);
         if (receivedPtr == nullptr) {
@@ -200,12 +201,41 @@ int HksExtStub::ProcessExtGetRemotePropertyReply(MessageParcel& data)
             err = ERR_NO_MEMORY;
             break;
         }
-        HKS_IF_NOT_EOK_LOGE_BREAK(memcpy_s(receivedPtr.get(), size, ptr, size), "memcpy_s receivedPtr failed");
-        err = ERR_OK;
+        if (memcpy_s(receivedPtr.get(), size, ptr, size) != EOK) {
+            HKS_LOG_E("memcpy_s receivedPtr failed");
+            err = ERR_INVALID_DATA;
+            break;
+        }
         receivedData = std::move(receivedPtr);
         receivedSize = size;
     } while (false);
+    return err;
+}
 
+int HksExtStub::ProcessAsyncReply(MessageParcel &data, uint32_t msgCode)
+{
+    // errCode = the real result code (passed through faithfully, error codes are not masked)
+    HKS_LOG_I("ukey client ProcessAsyncReply begin, msgCode=%u", msgCode);
+    uint32_t errCode = 1;
+    if (!data.ReadUint32(errCode)) {
+        HKS_LOG_E("ipc client read errCode failed");
+        HKS_LOG_E("ukey client ProcessAsyncReply read errCode failed, msgCode=%u", msgCode);
+        std::unique_ptr<uint8_t[]> emptyData(nullptr);
+        SendAsyncReply(HKS_ERROR_IPC_MSG_FAIL, emptyData, 0, msgCode, nullptr);
+        return ERR_INVALID_DATA;
+    }
+    HKS_LOG_I("ukey client ProcessAsyncReply got errCode=%u, msgCode=%u", errCode, msgCode);
+    std::unique_ptr<uint8_t[]> receivedData{};
+    uint32_t receivedSize = 0;
+    int err = ERR_OK;
+    if (errCode == HKS_SUCCESS) {
+        err = ReadAsyncReplyData(data, receivedData, receivedSize);
+    } else {
+        // error path: no size/data fields (the server writes errInfo directly on error)
+        err = ERR_INVALID_DATA;
+    }
+
+    // error-detail parsing (errInfo is parsed on the error path as well)
     int32_t errVal = 0;
     HKS_IF_TRUE_EXCU(!data.ReadInt32(errVal), errVal = static_cast<int32_t>(errCode));
     uint32_t descLen = 0;
@@ -222,7 +252,9 @@ int HksExtStub::ProcessExtGetRemotePropertyReply(MessageParcel& data)
         }
     }
     struct HksExternalErrorInfo errInfo = {errVal, errorDesc, descLen, hasErrorInfo};
-    SendAsyncReply(errCode, receivedData, receivedSize, HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY, &errInfo);
+    // wire code = the original request code, stored and passed through (the client uses
+    // receivedCode == the code it sent to guard against cross-talk)
+    SendAsyncReply(errCode, receivedData, receivedSize, msgCode, &errInfo);
     HKS_IF_TRUE_EXCU(errorDesc != nullptr, HKS_FREE(errorDesc));
     return err;
 }
@@ -260,11 +292,32 @@ int HksExtStub::OnRemoteRequest(uint32_t code,
     (void)reply;
     (void)option;
     if (data.ReadInterfaceToken() != GetDescriptor()) {
+        HKS_LOG_E("ukey client OnRemoteRequest token mismatch, code=%u -> drop reply", code);
         return ERR_INVALID_DATA;
     }
+    // ukey async refactor: coverage set = 11 ukey-native extension codes + 7 reused standard
+    // codes (wire code = the original request code, unified delivery protocol) + the legacy 42
+    // (transition-period compatibility with old servers)
     switch (code) {
-        case HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY_REPLY:
-            return ProcessExtGetRemotePropertyReply(data);
+        case HKS_MSG_GEN_KEY:
+        case HKS_MSG_EXPORT_PUBLIC_KEY:
+        case HKS_MSG_IMPORT_WRAPPED_KEY:
+        case HKS_MSG_INIT:
+        case HKS_MSG_UPDATE:
+        case HKS_MSG_FINISH:
+        case HKS_MSG_ABORT:
+        case HKS_MSG_EXT_AUTH_UKEY_PIN:
+        case HKS_MSG_EXT_GET_UKEY_PIN_AUTH_STATE:
+        case HKS_MSG_EXT_OPEN_REMOTE_HANDLE:
+        case HKS_MSG_EXT_CLOSE_REMOTE_HANDLE:
+        case HKS_MSG_EXT_CLEAR_PIN_AUTH_STATE:
+        case HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES:
+        case HKS_MSG_EXT_EXPORT_CERTIFICATE:
+        case HKS_MSG_EXT_IMPORT_CERTIFICATE:
+        case HKS_MSG_EXT_QUERY_ABILITY_INFO:
+        case HKS_MSG_EXT_GET_RESOURCE_ID:
+        case HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY_REPLY: // legacy compat: SET_OR_GET replies with code 42
+            return ProcessAsyncReply(data, code);
         default:
             HKS_LOG_E("OnRemoteRequest unexpected code %" LOG_PUBLIC "u", code);
             return ERR_TRANSACTION_FAILED;
@@ -299,6 +352,8 @@ void HksExtProxy::SendAsyncReply(uint32_t errCode, std::unique_ptr<uint8_t[]> &s
     uint32_t msgCode, const struct HksExternalErrorInfo *errInfo)
 {
     HKS_IF_NULL_LOGE_RETURN_VOID(Remote(), "Remote() is nullptr! Would not SendRequest!")
+    HKS_LOG_I("ukey SendAsyncReply begin, msgCode=%{public}u errCode=%{public}u sendSize=%{public}u",
+        msgCode, errCode, sendSize);
     MessageParcel data;
     MessageParcel reply;
     MessageOption option = MessageOption::TF_ASYNC;
@@ -311,12 +366,17 @@ void HksExtProxy::SendAsyncReply(uint32_t errCode, std::unique_ptr<uint8_t[]> &s
             errCode, writeResult)
 
         HKS_IF_TRUE_LOGE_BREAK(errCode != HKS_SUCCESS, "ukey callback fail errCode %" LOG_PUBLIC "u", errCode)
+        // unified protocol: the success path always writes the size field (0 is valid — a
+        // no-output operation), and the data buffer is written only when size>0; the client's
+        // ProcessAsyncReply success path unconditionally reads size, so both ends align
         writeResult = data.WriteUint32(sendSize);
         HKS_IF_NOT_TRUE_LOGE_RETURN_VOID(writeResult, "WriteUint32 sendSize %" LOG_PUBLIC "u failed %" LOG_PUBLIC "d",
             sendSize, writeResult)
 
-        HKS_IF_TRUE_LOGE_BREAK(sendSize == 0 || sendData == nullptr,
-            "ukey reply success but empty sendData %" LOG_PUBLIC "u", sendSize)
+        if (sendSize == 0 || sendData == nullptr) {
+            break; // success with no output data: valid protocol terminal state (the error-info
+                   // fields are still written)
+        }
         writeResult = data.WriteBuffer(sendData.get(), sendSize);
         HKS_IF_NOT_TRUE_LOGE_RETURN_VOID(writeResult, "WriteBuffer size %" LOG_PUBLIC "u failed %" LOG_PUBLIC "d",
             sendSize, writeResult)
@@ -325,6 +385,8 @@ void HksExtProxy::SendAsyncReply(uint32_t errCode, std::unique_ptr<uint8_t[]> &s
     WriteErrorInfoToParcel(data, errInfo);
     int res = Remote()->SendRequest(msgCode, data, reply, option);
     HKS_IF_TRUE_LOGE(res != ERR_OK, "Remote()->SendRequest failed %" LOG_PUBLIC "d", res)
+    HKS_LOG_I("ukey SendAsyncReply done, msgCode=%{public}u errCode=%{public}u res=%{public}d",
+        msgCode, errCode, res);
 }
 
 } // namespace Hks

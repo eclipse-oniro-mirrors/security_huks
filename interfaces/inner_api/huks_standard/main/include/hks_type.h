@@ -78,7 +78,7 @@ struct HksParamSet {
 struct HksAbilityInfo {
     struct HksBlob bundleName;
     struct HksBlob abilityName;
-    int32_t abilityType;
+    int32_t abilityType; // 0: normal ui ability, 1: other types
 };
 
 struct HksExtCertInfoSet {

@@ -16,5 +16,11 @@
     extern "C++" {
       *OHOS::Security::Huks::HksExtPluginOn*
     };
+    # ukey async refactor: thread-pool control functions are exported as extern "C" aliases
+    # (for the host dlsym; C symbol names are stable and unaffected by mangling differences;
+    # the C++ versions need not be exported)
+    HksExtPluginGetTaskExecutorC;
+    HksExtPluginStartTaskExecutorC;
+    HksExtPluginStopTaskExecutorC;
   local: *;
 };

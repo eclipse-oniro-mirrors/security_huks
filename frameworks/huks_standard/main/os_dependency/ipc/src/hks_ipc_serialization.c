@@ -112,3 +112,76 @@ int32_t HksBlob3Pack(const struct HksBlob *blob1, const struct HksBlob *blob2,
     } while (0);
     return ret;
 }
+
+int32_t HksAllocInBlobWithThreeBlobsAndUint32(struct HksBlob *inBlob, const struct HksBlob *blob1,
+    const struct HksBlob *blob2, const struct HksBlob *blob3, uint32_t value)
+{
+    (void)value;
+    if (inBlob == NULL || blob1 == NULL || blob2 == NULL || blob3 == NULL) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    uint32_t size = (uint32_t)(sizeof(blob1->size) + ALIGN_SIZE(blob1->size));
+    size += (uint32_t)(sizeof(blob2->size) + ALIGN_SIZE(blob2->size));
+    size += (uint32_t)(sizeof(blob3->size) + ALIGN_SIZE(blob3->size));
+    size += (uint32_t)(sizeof(uint32_t));
+
+    inBlob->data = (uint8_t *)HksMalloc(size);
+    HKS_IF_NULL_LOGE_RETURN(inBlob->data, HKS_ERROR_MALLOC_FAIL, "malloc inBlob fail");
+
+    inBlob->size = size;
+    return HKS_SUCCESS;
+}
+
+int32_t HksBlob3AndUint32Unpack(const struct HksBlob *srcData, struct HksBlob *blob1,
+    struct HksBlob *blob2, struct HksBlob *blob3, uint32_t *value)
+{
+    uint32_t offset = 0;
+    int32_t ret = 0;
+
+    do {
+        ret = GetBlobFromBuffer(blob1, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob1 failed!");
+
+        ret = GetBlobFromBuffer(blob2, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob2 failed!");
+
+        ret = GetBlobFromBuffer(blob3, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob3 failed!");
+
+        if ((offset > srcData->size) || ((srcData->size - offset) < sizeof(uint32_t))) {
+            ret = HKS_ERROR_BUFFER_TOO_SMALL;
+            HKS_LOG_E("get uint32 failed, buffer too small");
+            break;
+        }
+        *value = *((uint32_t *)(srcData->data + offset));
+        offset += sizeof(uint32_t);
+    } while (0);
+    return ret;
+}
+
+int32_t HksBlob3AndUint32Pack(const struct HksBlob *blob1, const struct HksBlob *blob2,
+    const struct HksBlob *blob3, uint32_t value, struct HksBlob *destData)
+{
+    uint32_t offset = 0;
+    int32_t ret;
+    do {
+        ret = CopyBlobToBuffer(blob1, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob1 failed");
+
+        ret = CopyBlobToBuffer(blob2, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob2 failed");
+
+        ret = CopyBlobToBuffer(blob3, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob3 failed");
+
+        if ((offset > destData->size) || ((destData->size - offset) < sizeof(uint32_t))) {
+            ret = HKS_ERROR_BUFFER_TOO_SMALL;
+            HKS_LOG_E("copy uint32 failed, buffer too small");
+            break;
+        }
+        HKS_IF_NOT_EOK_LOGE_RETURN(memcpy_s(destData->data + offset, destData->size - offset, &value,
+            sizeof(value)), HKS_ERROR_INSUFFICIENT_MEMORY, "copy uint32 data failed!")
+        offset += sizeof(uint32_t);
+    } while (0);
+    return ret;
+}

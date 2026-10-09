@@ -31,6 +31,11 @@ int32_t VerifyCallerAndAdjustUidParam(const HksProcessInfo &processInfo, const C
     return HKS_SUCCESS;
 }
 
+bool HksIsCallerSystemApp(const HksProcessInfo *processInfo)
+{
+    return true;
+}
+
 } // namespace OHOS::Security::Huks
 
 int32_t HksGetBundleNameFromUid(uint32_t uid, std::string &bundleName)

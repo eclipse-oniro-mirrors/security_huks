@@ -25,6 +25,7 @@ class CppAbilityInfo {
 
         std::string bundleName{};
         std::string abilityName{};
+        int32_t abilityType = 0; // 0: normal ui ability, 1: other types
 };
 
 #endif

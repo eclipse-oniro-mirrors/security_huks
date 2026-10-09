@@ -1241,7 +1241,7 @@ HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest051, TestSi
     uint8_t abilityNameData[abilityNameSize] = { 'a', 'b', 'c' };
     struct HksBlob abilityName = { abilityNameSize, abilityNameData };
 
-    struct HksAbilityInfo abilityInfo = { bundleName, abilityName };
+    struct HksAbilityInfo abilityInfo = { bundleName, abilityName, 1 };
     struct HksBlob outResourceId = { resourceIdSize, (uint8_t *)HksMalloc(resourceIdSize) };
     struct HksAbilityInfo outAbilityInfo;
     outAbilityInfo.bundleName = { bundleNameSize, (uint8_t *)HksMalloc(bundleNameSize) };
@@ -1252,6 +1252,7 @@ HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest051, TestSi
     EXPECT_EQ(outResourceId.size, resourceIdSize);
     EXPECT_EQ(outAbilityInfo.bundleName.size, bundleNameSize);
     EXPECT_EQ(outAbilityInfo.abilityName.size, abilityNameSize);
+    EXPECT_EQ(outAbilityInfo.abilityType, 1);
 
     HKS_FREE(outResourceId.data);
     HKS_FREE(outAbilityInfo.bundleName.data);

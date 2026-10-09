@@ -199,13 +199,15 @@ void HksIpcServiceQueryAbilityInfo(const struct HksBlob *srcData, const uint8_t 
 {
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     struct HksBlob resourceId = { 0, NULL };
-    struct HksAbilityInfo abilityInfo;
+    struct HksAbilityInfo abilityInfo = {};
     struct HksProcessInfo processInfo = HKS_PROCESS_INFO_INIT_VALUE;
     struct HksBlob outBlob = { 0, NULL };
+    uint32_t abilityType = 0;
     int32_t ret;
 
     do {
-        ret = HksBlob3Unpack(srcData, &resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName);
+        ret = HksBlob3AndUint32Unpack(srcData, &resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName,
+            &abilityType);
         HKS_IF_NOT_SUCC_BREAK(ret, "HksIpcServiceQueryAbilityInfo Ipc fail")
 
         ret = HksGetProcessInfoForIPC(NULL, context, &processInfo);
@@ -214,10 +216,12 @@ void HksIpcServiceQueryAbilityInfo(const struct HksBlob *srcData, const uint8_t 
         ret = HksIpcQueryAbilityInfoAdapter(&processInfo, &resourceId, &abilityInfo);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksIpcQueryAbilityInfoAdapter fail, ret = %" LOG_PUBLIC "d", ret)
 
-        ret = HksAllocInBlobWithThreeBlobs(&outBlob, &resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName);
+        ret = HksAllocInBlobWithThreeBlobsAndUint32(&outBlob, &resourceId, &abilityInfo.bundleName,
+            &abilityInfo.abilityName, (uint32_t)abilityInfo.abilityType);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "alloc outBlob fail")
 
-        ret = HksBlob3Pack(&resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName, &outBlob);
+        ret = HksBlob3AndUint32Pack(&resourceId, &abilityInfo.bundleName, &abilityInfo.abilityName,
+            (uint32_t)abilityInfo.abilityType, &outBlob);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "Huks service pack fail")
     } while (0);
 

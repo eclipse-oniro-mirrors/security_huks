@@ -31,15 +31,25 @@ if (os_level == "standard") {
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/app_observer",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common/inc",
       "//base/security/huks/services/huks_standard/huks_service/main/systemapi_wrap/bms/include",
+      "//base/security/huks/services/huks_standard/huks_service/extension/ukey/connection/inc",
+      "//base/security/huks/frameworks/huks_standard/main/common/include",
     ]
 
-    sources = [ "interface/plugin_interface.cpp" ]
+    # The shared thread pool is provided by libhuks_common_standard_static (hks_task_executor.o)
+    # and is no longer compiled into this SO directly (otherwise duplicate symbols with the
+    # common library in this SO's deps). Per-DSO independent-instance semantics are unchanged:
+    # this SO's version script hides symbols with local:*, so the service SO and the extension
+    # SO each hold their own copy without interfering with each other.
+    sources = [
+      "interface/plugin_interface.cpp",
+    ]
 
     deps = [
       "//base/security/huks/frameworks/huks_standard/main/common:libhuks_common_standard_static",
       "//base/security/huks/frameworks/huks_standard/main/os_dependency:libhuks_mem_standard_static",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/app_observer:libhuks_ukey_app_observer_static",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common:libhuks_ukey_common_static",
+      "//base/security/huks/services/huks_standard/huks_service/extension/ukey/connection:libhuks_extension_connection_static",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/ext_life_cycle_manger:libhuks_provider_life_cycle_manager_static",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/handle_manager:libhuks_remote_handle_manager_static",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey/session_manager:libhuks_session_manager_static",
@@ -60,6 +70,7 @@ if (os_level == "standard") {
     }
     external_deps = [
       "ability_runtime:ability_connect_callback_stub",
+      "ability_runtime:ability_manager",  # AbilityManagerClient (consumed by the connection component)
       "bundle_framework:appexecfwk_base",
       "bundle_framework:appexecfwk_core",
       "c_utils:utils",

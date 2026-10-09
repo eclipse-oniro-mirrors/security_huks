@@ -298,13 +298,6 @@ ENABLE_CFI(__attribute__((visibility("default"))) int32_t Fake_HksExtPluginOnQue
     return 0;
 }
 
-ENABLE_CFI(__attribute__((visibility("default"))) int32_t Fake_HksExtPluginOnSetExtensionProxy(
-    const HksProcessInfo &processInfo, const std::string &providerName,
-    const CppParamSet &paramSet, void *remoteObjectRaw))
-{
-    return 0;
-}
-
 extern "C" void *__wrap_dlopen(const char* filename, int flags)
 {
     static int fakeHandle = 1;
@@ -383,9 +376,6 @@ extern "C" void *__wrap_dlsym(void* handle, const char* symbol)
          {"_ZN4OHOS8Security4Huks36HksExtPluginOnSetOrGetRemotePropertyER23HksProcessWithErrorInfo"
          "23HksExtPropertyOperationRKNSt3__h12basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEESD_R11CppParamSet",
          (void*)Fake_HksExtPluginOnSetOrGetRemoteProperty},
-         {"_ZN4OHOS8Security4Huks31HksExtPluginOnSetExtensionProxyERK14HksProcessInfoRKNSt3__h12basic_string"
-         "IcNS5_11char_traitsIcEENS5_9allocatorIcEEEERK11CppParamSetPv",
-         (void*)Fake_HksExtPluginOnSetExtensionProxy},
     };
 
     for (auto &item : kFakeSymbols) {

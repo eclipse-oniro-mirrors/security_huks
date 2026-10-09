@@ -77,7 +77,9 @@ public:
 
     int OnRemoteRequest(uint32_t code, MessageParcel &data, MessageParcel &reply, MessageOption &option) override;
 private:
-    int ProcessExtGetRemotePropertyReply(MessageParcel& data);
+    // unified reply parsing: wire code = the original request code; shared by all codes, no
+    // per-operation special-casing
+    int ProcessAsyncReply(MessageParcel &data, uint32_t msgCode);
     uint32_t mErrCode = 0;
     uint32_t mSize = 0;
     uint32_t mMsgCode = 0;

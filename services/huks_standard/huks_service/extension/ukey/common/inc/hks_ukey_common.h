@@ -44,6 +44,7 @@ namespace Huks {
     constexpr const char *INDEX_NAME_KEY = "index";
     constexpr const char *INDEX_KEY_NAME_KEY = "key";
     constexpr const char *USERID_KEY = "userid";
+    constexpr const char *ABILITY_TYPE_KEY = "abilityType";
 
     constexpr int32_t HKS_MAX_PROVIDER_NUM = 10;
     constexpr int32_t MAX_ABILITY_NAME_LEN = 128;
@@ -82,6 +83,7 @@ namespace Huks {
     struct AbilityInfo {
         std::string abilityName{};
         std::string index{};
+        int32_t abilityType = 0; // 0: normal ui ability, 1: other types
     };
     int32_t ParseAbilityInfoArrayFromJson(const std::string &jsonStr, std::vector<AbilityInfo> &abilityInfoArray);
     // Parse ResourceID json

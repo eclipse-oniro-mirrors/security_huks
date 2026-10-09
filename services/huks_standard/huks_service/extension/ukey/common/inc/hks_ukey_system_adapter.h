@@ -28,6 +28,16 @@ namespace Huks {
     int32_t VerifyCallerAndAdjustUidParam(const HksProcessInfo &processInfo, const CppParamSet &paramSet,
         CppParamSet &newParamSet);
 
+    // Caller system-app check (worker-thread safe). When the ukey plugin runs on the
+    // huks_service worker thread (the ukey async refactor thread pool), there is no IPC
+    // context: IPCSkeleton::GetCallingFullTokenID() falls back to the service's own token
+    // (native, not a HAP), so IsSystemAppByFullTokenID would wrongly reject system apps.
+    // processInfo.accessTokenId is the caller's real tokenID captured by the IPC thread on
+    // admission (correct on both sync and async paths); here its system-app flag is queried
+    // via AccessTokenKit::GetHapTokenInfo, consistent with the pre-refactor semantics of
+    // IsSystemAppByFullTokenID(caller's full token).
+    bool HksIsCallerSystemApp(const HksProcessInfo *processInfo);
+
 }
 }
 }

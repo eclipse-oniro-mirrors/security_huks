@@ -33,9 +33,6 @@
 #include "hks_template.h"
 #include "hks_ukey_common.h"
 #include "hks_ukey_system_adapter.h"
-#include "accesstoken_kit.h"
-#include "tokenid_kit.h"
-#include "ipc_skeleton.h"
 #include "hks_json_wrapper.h"
 #include "hks_ext_error_info.h"
 namespace OHOS {
@@ -451,7 +448,7 @@ int32_t HksRemoteHandleManager::SetOrGetRemoteProperty(struct HksProcessWithErro
     int32_t ret = VerifyCallerAndAdjustUidParam(*(processAndError.processInfo), paramSet, newParamSet);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "uid check in %" LOG_PUBLIC "s failed.", __PRETTY_FUNCTION__)
 
-    if (!OHOS::Security::AccessToken::TokenIdKit::IsSystemAppByFullTokenID(IPCSkeleton::GetCallingFullTokenID())) {
+    if (!HksIsCallerSystemApp(processAndError.processInfo)) {
         HKS_IF_TRUE_LOGE_RETURN(propertyId == "SKF_ExportPublicKey", HKS_ERROR_INVALID_ARGUMENT,
             "Non-system app are not allowed to use SKF_ExportPublicKey")
     }

@@ -285,17 +285,20 @@ int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityI
         ret = HksCheckBlob3(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "Invalid input data, check blobl3 fail, ret = %" LOG_PUBLIC "d", ret)
 
-        ret = HksAllocInBlobWithThreeBlobs(&inBlob, resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName);
+        ret = HksAllocInBlobWithThreeBlobsAndUint32(&inBlob, resourceId, &abilityInfo->bundleName,
+            &abilityInfo->abilityName, (uint32_t)abilityInfo->abilityType);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "alloc inBlob fail")
 
-        ret = HksBlob3Pack(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName, &inBlob);
+        ret = HksBlob3AndUint32Pack(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName,
+            (uint32_t)abilityInfo->abilityType, &inBlob);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksQueryAbilityInfo pack fail")
 
         ret = HksSendRequest(HKS_MSG_EXT_QUERY_ABILITY_INFO, &inBlob, &outBlob, NULL);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksSendRequest fail, ret = %" LOG_PUBLIC "d", ret)
 
         (void)memset_s(resourceId->data, resourceId->size, 0, resourceId->size);
-        HksBlob3Unpack(&outBlob, &outResourceId, &unpackAbility.bundleName, &unpackAbility.abilityName);
+        HksBlob3AndUint32Unpack(&outBlob, &outResourceId, &unpackAbility.bundleName,
+            &unpackAbility.abilityName, (uint32_t *)&unpackAbility.abilityType);
 
         ret = HksQueryAbilityCopyResult(&outResourceId, &unpackAbility, resourceId, abilityInfo);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksQueryAbilityCopyResult fail, ret = %" LOG_PUBLIC "d", ret)

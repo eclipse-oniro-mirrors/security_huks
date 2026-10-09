@@ -85,4 +85,22 @@ const struct HksIpcThreeStagePoint HKS_IPC_THREE_STAGE_HANDLER[] = {
 
 void HksIpcErrorResponse(const uint8_t *context);
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/*
+ * ukey async refactor: unified handler lookup (task dispatch and the legacy path share the
+ * same table). Returning nullptr means the message code has no registered handler (the caller
+ * handles it as an error). Three-stage codes (INIT/UPDATE/FINISH/ABORT) have a different
+ * signature (with outData) and are looked up via HksFindThreeStageHandler.
+ */
+HksIpcHandlerFuncProc HksFindMessageHandler(enum HksIpcInterfaceCode msgId);
+
+HksIpcThreeStageHandlerFuncProc HksFindThreeStageHandler(enum HksIpcInterfaceCode msgId);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif
