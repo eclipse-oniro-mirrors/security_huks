@@ -73,9 +73,11 @@
 
 #ifdef L2_STANDARD
 #include "hks_ha_event_report.h"
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
 #include "hks_ukey_service_adapter.h"
-#include "hks_se_api_wrap.h"
 #include "hks_report_ukey_event.h"
+#endif
+#include "hks_se_api_wrap.h"
 #endif
 
 #ifdef HUKS_ENABLE_UPGRADE_KEY_STORAGE_SECURE_LEVEL
