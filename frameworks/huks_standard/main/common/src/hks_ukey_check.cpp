@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include "hks_common_check.h"
+#include "huks_service_ipc_interface_code.h"
 
 int32_t HksCheckIsUkeyOperation(const struct HksParamSet *paramSet, int32_t *outRet)
 {
@@ -43,4 +44,24 @@ int32_t HksCheckIsUkeyOperation(const struct HksParamSet *paramSet, int32_t *out
         }
     }
     return HKS_ERROR_INVALID_ARGUMENT;
+}
+
+// Coverage set = 10 ukey-native extension codes + 7 reused standard codes; standard codes read
+// HKS_TAG_TIME_OUT(529), extension codes always read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006). Called
+// only for the ukey async coverage set; other message codes fall back to 200006 (defensive; the
+// caller has already done the ukey check).
+enum HksTag HksUkeyTimeoutTagByMsgCode(uint32_t msgCode)
+{
+    switch (msgCode) {
+        case HKS_MSG_GEN_KEY:
+        case HKS_MSG_EXPORT_PUBLIC_KEY:
+        case HKS_MSG_IMPORT_WRAPPED_KEY:
+        case HKS_MSG_INIT:
+        case HKS_MSG_UPDATE:
+        case HKS_MSG_FINISH:
+        case HKS_MSG_ABORT:
+            return HKS_TAG_TIME_OUT;
+        default:
+            return HKS_EXT_CRYPTO_TAG_TIMEOUT;
+    }
 }

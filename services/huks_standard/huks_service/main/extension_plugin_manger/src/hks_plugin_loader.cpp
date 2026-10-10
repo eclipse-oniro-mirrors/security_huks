@@ -16,6 +16,8 @@
 #include "hks_function_types.h"
 #include "hks_plugin_lifecycle_manager.h"
 #include "hks_plugin_loader.h"
+
+#include "hks_task_executor.h"
 #include <vector>
 
 namespace OHOS {
@@ -34,11 +36,36 @@ void HuksPluginLoader::ReleaseInstance()
     HuksPluginLoader::DestroyInstance();
 }
 
+int32_t HuksPluginLoader::RepopulatePluginMethods(
+    OHOS::SafeMap<PluginMethodEnum, void*> &pluginProviderMap)
+{
+    for (auto i = 0; i < static_cast<int32_t>(PluginMethodEnum::COUNT); ++i) {
+        std::string methodString = GetMethodByEnum(static_cast<PluginMethodEnum>(i));
+        if (methodString.empty()) {
+            continue;
+        }
+        dlerror();
+        void *func = dlsym(m_pluginHandle, methodString.c_str());
+        const char *dlsym_error = dlerror();
+        if (dlsym_error != nullptr) {
+            HKS_LOG_E("failed to Find entry %{public}s, error: %{public}s",
+                methodString.c_str(), dlsym_error);
+            continue;
+        }
+        pluginProviderMap.Insert(static_cast<PluginMethodEnum>(i), func);
+    }
+    return HKS_SUCCESS;
+}
+
 int32_t HuksPluginLoader::LoadPlugins(const struct HksProcessInfo &info, const std::string &providerName,
     const CppParamSet &paramSet, OHOS::SafeMap<PluginMethodEnum, void*> &pluginProviderMap)
 {
     std::lock_guard<std::mutex> lock(libMutex);
-    HKS_IF_TRUE_RETURN(m_pluginHandle != nullptr, HKS_SUCCESS)
+
+    // SO already loaded: re-populate function pointer map (may have been cleared by UnLoadPlugins)
+    if (m_pluginHandle != nullptr) {
+        return RepopulatePluginMethods(pluginProviderMap);
+    }
 
     m_pluginHandle = dlopen(pluginSo.c_str(), RTLD_NOW);
     HKS_IF_NULL_LOGE_RETURN(m_pluginHandle, HKS_ERROR_OPEN_LIB_FAIL,
@@ -52,7 +79,7 @@ int32_t HuksPluginLoader::LoadPlugins(const struct HksProcessInfo &info, const s
             int32_t ret = dlclose(m_pluginHandle);
             HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, HKS_ERROR_DLCLOSE_FAIL,
                 "dlclose fail, error: %{public}s", dlerror())
-            
+
             m_pluginHandle = nullptr;
             pluginProviderMap.Clear();
             return HKS_ERROR_FIND_FUNC_MAP_FAIL;
@@ -70,7 +97,7 @@ int32_t HuksPluginLoader::LoadPlugins(const struct HksProcessInfo &info, const s
             HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, HKS_ERROR_DLCLOSE_FAIL,
                 "dlclose fail, error: %{public}s", dlsym_error)
 
-            m_pluginHandle= nullptr;
+            m_pluginHandle = nullptr;
             pluginProviderMap.Clear();
             return HKS_ERROR_GET_FUNC_POINTER_FAIL;
         }
@@ -86,14 +113,95 @@ int32_t HuksPluginLoader::UnLoadPlugins(const struct HksProcessInfo &info, const
     std::lock_guard<std::mutex> lock(libMutex);
     HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, HKS_SUCCESS)
 
+    // Only clear function pointers; actual dlclose is deferred to avoid
+    // invalidating Stub vtable while the service binder release (BR_RELEASE) is in flight.
     pluginProviderMap.Clear();
+    HKS_LOG_I("UnLoadPlugins: function pointers cleared, dlclose deferred");
+    return HKS_SUCCESS;
+}
+
+int32_t HuksPluginLoader::DlcloseInternal()
+{
+    std::lock_guard<std::mutex> lock(libMutex);
+    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, HKS_SUCCESS)
 
     int32_t ret = dlclose(m_pluginHandle);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, HKS_ERROR_DLCLOSE_FAIL, "dlclose fail, error: %{public}s", dlerror())
+    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, HKS_ERROR_DLCLOSE_FAIL,
+        "dlclose fail, error: %{public}s", dlerror())
 
     m_pluginHandle = nullptr;
-    HKS_LOG_I("lib close success!");
+    HKS_LOG_I("delayed dlclose success!");
     return HKS_SUCCESS;
+}
+
+bool HuksPluginLoader::IsHandleNull() const
+{
+    return m_pluginHandle == nullptr;
+}
+
+// ukey async refactor: calls the SO-exported thread-pool control functions via dlsym (symbols
+// in libhuks_external_crypto_ext_core.map; silently succeeds when the SO is not loaded — the
+// thread pool lives with the SO). Executor handle acquisition: unlike Start/Stop, the returned
+// pointer's lifetime is decided by the SO, so the caller must do Get+Submit within the same
+// libMutex critical section (prevents a dlclose race); therefore this method does not lock
+// itself (Start/Stop lock for idempotency; this one is locked by the caller uniformly)
+OHOS::Security::Hks::HksTaskExecutor *HuksPluginLoader::GetTaskExecutor()
+{
+    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, nullptr)
+    using GetFunc = OHOS::Security::Hks::HksTaskExecutor *(*)();
+    dlerror();
+    auto func = reinterpret_cast<GetFunc>(dlsym(m_pluginHandle, "HksExtPluginGetTaskExecutorC"));
+    const char *err = dlerror();
+    if (func == nullptr || err != nullptr) {
+        HKS_LOG_E("dlsym HksExtPluginGetTaskExecutorC fail: %{public}s", err != nullptr ? err : "null");
+        return nullptr;
+    }
+    return func();
+}
+
+
+int32_t HuksPluginLoader::SubmitTaskExecutor(std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task)
+{
+    // Get+Submit inside the libMutex critical section: mutually exclusive with DlcloseInternal
+    // (same lock), closing the UAF window where "the executor pointer is obtained and then the
+    // SO is dlclosed". The submission critical section is very short (enqueue + notify,
+    // microseconds), so it poses no deadlock risk with register/unload.
+    std::lock_guard<std::mutex> lock(libMutex);
+    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, -1) // SO not loaded: executor does not exist
+    auto *executor = GetTaskExecutor();
+    HKS_IF_TRUE_RETURN(executor == nullptr, -1)
+    return static_cast<int32_t>(executor->Submit(std::move(task)));
+}
+
+int32_t HuksPluginLoader::StartTaskExecutor()
+{
+    std::lock_guard<std::mutex> lock(libMutex);
+    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, HKS_SUCCESS)
+    using StartFunc = int32_t (*)();
+    dlerror();
+    auto func = reinterpret_cast<StartFunc>(dlsym(m_pluginHandle, "HksExtPluginStartTaskExecutorC"));
+    const char *err = dlerror();
+    if (func == nullptr || err != nullptr) {
+        HKS_LOG_E("dlsym HksExtPluginStartTaskExecutorC fail: %{public}s", err != nullptr ? err : "null");
+        return HKS_ERROR_FIND_FUNC_MAP_FAIL;
+    }
+    return func();
+}
+
+int32_t HuksPluginLoader::StopTaskExecutor()
+{
+    std::lock_guard<std::mutex> lock(libMutex);
+    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, HKS_SUCCESS)
+    using StopFunc = int32_t (*)();
+    dlerror();
+    auto func = reinterpret_cast<StopFunc>(dlsym(m_pluginHandle, "HksExtPluginStopTaskExecutorC"));
+    const char *err = dlerror();
+    if (func == nullptr || err != nullptr) {
+        HKS_LOG_E("dlsym HksExtPluginStopTaskExecutorC fail: %{public}s", err != nullptr ? err : "null");
+        return HKS_ERROR_FIND_FUNC_MAP_FAIL;
+    }
+    return func(); // inner Stop(): joins in-flight tasks (<=60s) and runs OnDone for each queued
+                   // task one by one — the caller is the delayed-dlclose thread
 }
 
 std::string HuksPluginLoader::GetMethodByEnum(PluginMethodEnum methodEnum)
@@ -185,9 +293,6 @@ static void RegisterOtherMethodMaps(OHOS::SafeMap<PluginMethodEnum, std::string>
     map.Insert(PluginMethodEnum::FUNC_ON_GET_RESOURCE_ID,
         "_ZN4OHOS8Security4Huks27HksExtPluginOnGetResourceIdERK14HksProcessInfoRKNSt3__h12basic_string"
         "IcNS5_11char_traitsIcEENS5_9allocatorIcEEEERK11CppParamSetRSB_PP20HksExternalErrorInfo");
-    map.Insert(PluginMethodEnum::FUNC_ON_SET_EXTENSION_PROXY,
-        "_ZN4OHOS8Security4Huks31HksExtPluginOnSetExtensionProxyERK14HksProcessInfoRKNSt3__h12basic_string"
-        "IcNS5_11char_traitsIcEENS5_9allocatorIcEEEERK11CppParamSetPv");
 }
 
 HuksPluginLoader::HuksPluginLoader()

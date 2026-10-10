@@ -14,13 +14,9 @@
  */
 
 #include "hks_plugin_lifecycle_manager.h"
-#include "hks_bms_api_wrap.h"
 #include "hks_plugin_loader.h"
 #include "hks_cfi.h"
-#include "hks_ability_manager_service_connection.h"
-#include "hks_extension_connection.h"
 #include "hks_ukey_common.h"
-#include "hks_ukey_system_adapter.h"
 #include <thread>
 
 #define NO_EXTENSION 0
@@ -28,14 +24,6 @@
 namespace OHOS {
 namespace Security {
 namespace Huks {
-
-static SafeMap<ProviderInfo, sptr<ExtensionConnection>> g_extensionConnectionMap;
-static int32_t ComputeProviderInfo(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet, ProviderInfo &providerInfo);
-static void DisconnectExtensionConnections(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet);
-static int32_t EnsureExtensionConnection(const HksProcessInfo &info, const ProviderInfo &providerInfo,
-    sptr<IRemoteObject> &remoteObject);
 
 std::shared_ptr<HuksPluginLifeCycleMgr> HuksPluginLifeCycleMgr::GetInstanceWrapper()
 {
@@ -47,9 +35,7 @@ void HuksPluginLifeCycleMgr::ReleaseInstance()
     HuksPluginLifeCycleMgr::DestroyInstance();
 }
 
-constexpr int WAIT_CALlBACK = 20;
-constexpr int WAIT_TIME_MS = 5;
-constexpr int WAIT_ITERATION = 6;
+constexpr int WAIT_CALLBACK = 20;
 
 static std::function<void(HksProcessInfo)> MakeDeathCallback(
     std::shared_ptr<HuksPluginLifeCycleMgr> plugin,
@@ -61,49 +47,11 @@ static std::function<void(HksProcessInfo)> MakeDeathCallback(
                 HKS_LOG_E("MakeDeathCallback: plugin instance is null, skip UnRegisterProvider");
                 return;
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long long>(WAIT_CALlBACK)));
+            std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long long>(WAIT_CALLBACK)));
             HKS_LOG_I("UnRegisterProvider from ExtensionConnection");
             plugin->UnRegisterProvider(processInfo, pdrName, paramSet_, true);
         }).detach();
     };
-}
-
-static int32_t CreateNewConnection(const HksProcessInfo &info, const ProviderInfo &providerInfo,
-    const std::string &providerName, const CppParamSet &paramSet, sptr<IRemoteObject> &remoteObject)
-{
-    auto connection = sptr<ExtensionConnection>(new (std::nothrow) ExtensionConnection(info));
-    HKS_IF_TRUE_LOGE_RETURN(connection == nullptr, HKS_ERROR_NULL_POINTER, "Failed to create ExtensionConnection")
-
-    connection->callBackFromPlugin(MakeDeathCallback(HuksPluginLifeCycleMgr::GetInstanceWrapper(),
-        providerName, paramSet));
-
-    AAFwk::Want want{};
-    want.SetElementName(providerInfo.m_bundleName, providerInfo.m_abilityName);
-    int32_t ret = connection->OnConnection(want, connection, info.userIdInt);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "AMSConnectAbility failed")
-
-    remoteObject = connection->GetRemoteObject();
-    HKS_IF_TRUE_LOGE_RETURN(remoteObject == nullptr, HKS_ERROR_NULL_POINTER,
-        "remoteObject is nullptr after connect")
-
-    g_extensionConnectionMap.Insert(providerInfo, connection);
-    return HKS_SUCCESS;
-}
-
-static int32_t EnsureExtensionConnection(const HksProcessInfo &info, const ProviderInfo &providerInfo,
-    sptr<IRemoteObject> &remoteObject)
-{
-    sptr<ExtensionConnection> existingConn{nullptr};
-    bool connExists = g_extensionConnectionMap.Find(providerInfo, existingConn);
-    if (connExists && existingConn != nullptr && existingConn->IsConnected()) {
-        HKS_LOG_I("Reusing existing connection for provider: %" LOG_PUBLIC "s, ability: %" LOG_PUBLIC "s",
-            providerInfo.m_providerName.c_str(), providerInfo.m_abilityName.c_str());
-        remoteObject = existingConn->GetRemoteObject();
-        HKS_IF_TRUE_LOGE_RETURN(remoteObject == nullptr, HKS_ERROR_NULL_POINTER,
-            "existing connection has null remoteObject")
-        return HKS_SUCCESS;
-    }
-    return HKS_ERROR_NOT_EXIST;
 }
 
 int32_t HuksPluginLifeCycleMgr::RegisterProvider(const struct HksProcessInfo &info,
@@ -111,9 +59,14 @@ int32_t HuksPluginLifeCycleMgr::RegisterProvider(const struct HksProcessInfo &in
 {
     int32_t ret;
     std::unique_lock<std::mutex> lock(soMutex);
+    auto pluginLoader = HuksPluginLoader::GetInstanceWrapper();
     if (m_refCount.load() == NO_EXTENSION) {
-        auto pluginLoader = HuksPluginLoader::GetInstanceWrapper();
         HKS_IF_TRUE_LOGE_RETURN(pluginLoader == nullptr, HKS_ERROR_NULL_POINTER, "Failed to get pluginLoader instance.")
+        // Always cancel pending dlclose when refCount is 0, regardless of
+        // whether the SO handle is still valid. The delayed dlclose thread
+        // only checks generation, not refCount, so we must bump generation
+        // to prevent it from closing the SO after a new Register arrives.
+        m_dlcloseGeneration.fetch_add(1, std::memory_order_acq_rel);
         ret = pluginLoader->LoadPlugins(info, providerName, paramSet, m_pluginProviderMap);
         HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "regist provider failed!")
     }
@@ -122,23 +75,64 @@ int32_t HuksPluginLifeCycleMgr::RegisterProvider(const struct HksProcessInfo &in
     ret = OnRegistProvider(info, providerName, paramSet, deathCallback);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "regist provider method in plugin loader is fail")
 
-    ProviderInfo providerInfo{};
-    ret = ComputeProviderInfo(info, providerName, paramSet, providerInfo);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ComputeProviderInfo failed")
-
-    sptr<IRemoteObject> remoteObject;
-    ret = EnsureExtensionConnection(info, providerInfo, remoteObject);
-    if (ret != HKS_SUCCESS) {
-        ret = CreateNewConnection(info, providerInfo, providerName, paramSet, remoteObject);
-        HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "CreateNewConnection failed")
+    // ukey async refactor: start the SO-internal thread pool at the end of the successful
+    // registration path (idempotent; if worker creation fails, Submit always returns STOPPED
+    // and reports the error via the callback, and the registration itself is not rolled back)
+    if (pluginLoader != nullptr) {
+        (void)pluginLoader->StartTaskExecutor();
     }
-
-    void *remoteObjectRaw = static_cast<void*>(remoteObject.GetRefPtr());
-    ret = OnSetExtProxy(info, providerName, paramSet, remoteObjectRaw);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "OnSetExtProxy failed")
 
     m_refCount.fetch_add(1, std::memory_order_acq_rel);
     return ret;
+}
+
+// Body of the delayed-dlclose thread: waits for the Ability Manager Service Phase 2 and its
+// binder release (BR_RELEASE) to finish, then unloads safely. ukey async refactor timing rule:
+// stop the SO-internal thread pool before dlclose (Stop+join before dlclose; this runs on the
+// detached delayed thread, satisfying the rule). Lock-order rule: the unload check (generation
+// + refCount) and Stop/join are in two separate critical sections — calling StopTaskExecutor
+// (->Stop->join) while holding soMutex would deadlock against the AutoRefCount on the worker
+// dispatch path (construction/destruction need the same soMutex), so the lock must be released
+// before join.
+void HuksPluginLifeCycleMgr::DelayedDlclose(uint32_t gen)
+{
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    auto loader = HuksPluginLoader::GetInstanceWrapper();
+    if (loader == nullptr) {
+        return;
+    }
+    bool proceed = false;
+    {
+        std::unique_lock<std::mutex> lock(soMutex);
+        if (m_dlcloseGeneration.load(std::memory_order_acquire) != gen) {
+            HKS_LOG_I("deferred dlclose cancelled, generation changed");
+            return;
+        }
+        if (m_refCount.load(std::memory_order_acquire) != NO_EXTENSION) {
+            HKS_LOG_I("deferred dlclose cancelled, refCount not zero");
+            return;
+        }
+        proceed = true;
+    }
+    if (!proceed) {
+        return;
+    }
+    (void)loader->StopTaskExecutor();
+    // second confirmation: if a new RegisterProvider arrived during the lock-released window
+    // (generation changed) or an in-flight dispatch raised refCount, skip dlclose and restart
+    // the thread pool to restore service (Start supports the Stopped->Running restart);
+    // otherwise unload safely
+    {
+        std::unique_lock<std::mutex> lock(soMutex);
+        if (m_dlcloseGeneration.load(std::memory_order_acquire) != gen ||
+            m_refCount.load(std::memory_order_acquire) != NO_EXTENSION) {
+            lock.unlock();
+            HKS_LOG_I("provider re-registered during deferred stop, restarting executor");
+            (void)loader->StartTaskExecutor();
+            return;
+        }
+    }
+    loader->DlcloseInternal();
 }
 
 int32_t HuksPluginLifeCycleMgr::UnRegisterProvider(const struct HksProcessInfo &info, const std::string &providerName,
@@ -153,8 +147,6 @@ int32_t HuksPluginLifeCycleMgr::UnRegisterProvider(const struct HksProcessInfo &
     int32_t ret = HKS_SUCCESS;
     int32_t deleteCount = 1;
     do {
-        DisconnectExtensionConnections(info, providerName, paramSet);
-
         ret = OnUnRegistProvider(info, providerName, paramSet, isdeath, deleteCount);
         HKS_IF_TRUE_LOGE_BREAK(ret != HKS_SUCCESS, "unregist provider failed! ret = %{public}d", ret)
 
@@ -174,12 +166,19 @@ int32_t HuksPluginLifeCycleMgr::UnRegisterProvider(const struct HksProcessInfo &
             HKS_LOG_E("Failed to get pluginLifeCycleMgr instance.");
             break;
         }
-            
+
         ret = pluginLifeCycleMgr->OnUnregisterAllObservers();
         HKS_IF_TRUE_LOGE_BREAK(ret != HKS_SUCCESS, "Failed to unregister all observers, ret = %{public}d", ret)
 
+        // Only clear function pointers; actual dlclose is deferred to keep
+        // Stub vtable valid while the service binder release (BR_RELEASE) is in flight.
         ret = pluginLoader->UnLoadPlugins(info, providerName, paramSet, m_pluginProviderMap);
-        HKS_IF_TRUE_LOGE_BREAK(ret != HKS_SUCCESS, "close lib failed!, ret = %{public}d", ret)
+        HKS_IF_TRUE_LOGE_BREAK(ret != HKS_SUCCESS, "unload plugins failed!, ret = %{public}d", ret)
+
+        // Launch delayed dlclose thread: wait 1s for the Ability Manager Service Phase 2 and
+        // its binder release (BR_RELEASE) to complete, then dlclose if no new RegisterProvider arrived.
+        uint32_t gen = m_dlcloseGeneration.load(std::memory_order_acquire);
+        std::thread(&HuksPluginLifeCycleMgr::DelayedDlclose, GetInstanceWrapper(), gen).detach();
     } while (0);
 
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "unregist provider fail");
@@ -232,7 +231,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnRegistProvider(const HksProcessInfo
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_REGISTER_PROVIDER, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "OnRegistProvider method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnRegisterProviderFunc>(funcPtr))(processInfo, providerName, paramSet, callback);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "OnRegistProvider fail, ret = %{public}d", ret)
     HKS_LOG_I("regist provider success");
@@ -246,7 +245,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnUnRegistProvider(const HksProcessIn
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_UN_REGISTER_PROVIDER, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "UnRegistProvider method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnUnRegisterProviderFunc>(funcPtr))
         (processInfo, providerName, paramSet, isdeath, deleteCount);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret,
@@ -263,7 +262,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnCreateRemoteKeyHandle(const HksProc
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_CREATE_REMOTE_KEY_HANDLE, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "CreateRemoteKeyHandle method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnCreateRemoteKeyHandleFunc>(funcPtr))(processInfo, index, paramSet, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "CreateRemoteKeyHandle fail, ret = %{public}d", ret)
     HKS_LOG_I("create remote key handle success");
@@ -278,7 +277,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnCloseRemoteKeyHandle(const HksProce
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_CLOSE_REMOTE_KEY_HANDLE, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "CloseRemoteKeyHandle method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnCloseRemoteKeyHandleFunc>(funcPtr))(processInfo, index, paramSet, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "CloseRemoteKeyHandle fail, ret = %{public}d", ret)
     HKS_LOG_I("close remote key handle success");
@@ -293,7 +292,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnAuthUkeyPin(const HksProcessInfo &p
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_AUTH_UKEY_PIN, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "AuthUkeyPin method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnAuthUkeyPinFunc>(funcPtr))(processInfo, index, paramSet, authOutParam, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "AuthUkeyPin fail, ret = %{public}d", ret)
     HKS_LOG_I("auth ukey pin success");
@@ -308,7 +307,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnGetVerifyPinStatus(const HksProcess
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_GET_VERIFY_PIN_STATUS, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "GetVerifyPinStatus method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnGetVerifyPinStatusFunc>(funcPtr))(processInfo, index, paramSet, state, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "GetVerifyPinStatus fail, ret = %{public}d", ret)
     HKS_LOG_I("get verify pin status success");
@@ -323,7 +322,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnClearUkeyPinAuthStatus(const HksPro
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_CLEAR_PIN_STATUS, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "ClearPinStatus method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnClearUkeyPinAuthStatusFunc>(funcPtr))(processInfo, index, paramSet, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ClearPinStatus fail, ret = %{public}d", ret)
     HKS_LOG_I("clear pin status success");
@@ -356,7 +355,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnExportCertificate(const HksProcessI
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_LIST_INDEX_CERTIFICATE, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "FindProviderCertificate method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnListIndexCertificateFunc>(funcPtr))(processInfo, index, paramSet, certsJson,
         errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "FindProviderCertificate fail, ret = %{public}d", ret)
@@ -373,7 +372,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnExportProviderAllCertificates(const
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_LIST_PROVIDER_ALL_CERTIFICATE, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "ListProviderAllCertificate method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnListProviderAllCertificateFunc>(funcPtr))
         (processInfo, providerName, paramSet, certsJsonArr, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ListProviderAllCertificate fail, ret = %{public}d", ret)
@@ -390,7 +389,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnImportCertificate(const HksProcessI
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_IMPORT_CERTIFICATE, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "ImportCertificate method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnImportCertificateFunc>(funcPtr))
         (processInfo, index, certInfo, paramSet, errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ImportCertificate fail, ret = %{public}d", ret)
@@ -406,7 +405,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnInitSession(struct HksProcessWithEr
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_INIT_SESSION, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "InitSession method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnInitSessionFunc>(funcPtr))(processAndError, index, paramSet, handle);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "InitSession fail, ret = %{public}d", ret)
     HKS_LOG_I("init session success");
@@ -422,7 +421,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnUpdateSession(struct HksProcessWith
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_UPDATE_SESSION, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "UpdateSession method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnUpdateSessionFunc>(funcPtr))(processAndError, handle, paramSet, inData, outData);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "UpdateSession fail, ret = %{public}d", ret)
     HKS_LOG_I("update session success");
@@ -438,7 +437,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnFinishSession(struct HksProcessWith
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_FINISH_SESSION, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "FinishSession method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnFinishSessionFunc>(funcPtr))(processAndError, handle, paramSet, inData, outData);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "FinishSession fail, ret = %{public}d", ret)
     HKS_LOG_I("finish session success");
@@ -468,7 +467,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnAbortSession(struct HksProcessWithE
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_ABORT_SESSION, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "AbortSession method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnAbortSessionFunc>(funcPtr))(processAndError, handle, paramSet);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "AbortSession fail, ret = %" LOG_PUBLIC "d", ret)
     HKS_LOG_I("abort session success");
@@ -481,7 +480,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnUnregisterAllObservers())
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_UNREGISTER_ALL_OBSERVERS, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "UnregisterAllObservers method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnUnregisterAllObserversFunc>(funcPtr))();
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "UnregisterAllObservers fail, ret = %{public}d", ret)
     return HKS_SUCCESS;
@@ -496,7 +495,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnImportWrappedKey(struct HksProcessW
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_IMPORT_WRAPPED_KEY, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "ImportWrappedKey method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnImportWrappedKeyFunc>(funcPtr))
         (processAndError, index, wrappingKeyIndex, paramSet, wrappedData);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ImportWrappedKey fail, ret = %" LOG_PUBLIC "d", ret)
@@ -512,7 +511,7 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnExportPublicKey(struct HksProcessWi
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_EXPORT_PUBLIC_KEY, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "ExportPublicKey method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnExportPublicKeyFunc>(funcPtr))(processAndError, index, paramSet, outData);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ExportPublicKey fail, ret = %" LOG_PUBLIC "d", ret)
     HKS_LOG_I("export public key success");
@@ -528,119 +527,12 @@ ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnGetResourceId(const HksProcessInfo 
     bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_GET_RESOURCE_ID, funcPtr);
     HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
         "GetResourceId method enum not found in plugin provider map.")
-    
+
     int32_t ret = (*reinterpret_cast<OnGetResourceIdFunc>(funcPtr))(processInfo, providerName, paramSet, resourceId,
         errInfo);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "GetResourceId fail, ret = %" LOG_PUBLIC "d", ret)
     HKS_LOG_I("get resource id success");
     return HKS_SUCCESS;
-}
-
-ENABLE_CFI(int32_t HuksPluginLifeCycleMgr::OnSetExtProxy(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet, void *remoteObjectRaw))
-{
-    void *funcPtr = nullptr;
-    bool isFind = m_pluginProviderMap.Find(PluginMethodEnum::FUNC_ON_SET_EXTENSION_PROXY, funcPtr);
-    HKS_IF_TRUE_LOGE_RETURN(!isFind, HKS_ERROR_FIND_FUNC_MAP_FAIL,
-        "OnSetExtProxy method enum not found in plugin provider map.")
-
-    int32_t ret = (*reinterpret_cast<OnSetExtensionProxyFunc>(funcPtr))(processInfo, providerName, paramSet,
-        remoteObjectRaw);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "OnSetExtProxy fail, ret = %{public}d", ret)
-    HKS_LOG_I("set extension proxy success");
-    return HKS_SUCCESS;
-}
-
-static int32_t ComputeProviderInfo(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet, ProviderInfo &providerInfo)
-{
-    int32_t ret = HksGetBundleNameFromUid(processInfo.uidInt, providerInfo.m_bundleName);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "HksGetBundleNameFromUid failed")
-    providerInfo.m_providerName = providerName;
-    auto abilityName = paramSet.GetParam<HKS_EXT_CRYPTO_TAG_ABILITY_NAME>();
-    HKS_IF_TRUE_LOGE_RETURN(abilityName.first != HKS_SUCCESS, HKS_ERROR_ABILITY_NAME_MISSING,
-        "abilityName missing")
-    providerInfo.m_abilityName = std::string(abilityName.second.begin(), abilityName.second.end());
-    providerInfo.m_userid = processInfo.userIdInt;
-    return HKS_SUCCESS;
-}
-
-static bool IsConnectionShared(const sptr<ExtensionConnection> &connection)
-{
-    bool shared = false;
-    g_extensionConnectionMap.Iterate([&](const ProviderInfo &, sptr<ExtensionConnection> &otherConn) {
-        if (otherConn == connection) {
-            shared = true;
-        }
-    });
-    return shared;
-}
-
-static void WaitAmsReleaseStub(const sptr<ExtensionConnection> &connection)
-{
-    uint8_t waitIteration = WAIT_ITERATION;
-    HKS_LOG_I("stub refcount: %{public}d", connection->GetSptrRefCount());
-    while ((connection->GetSptrRefCount() > 1) && (waitIteration > 0)) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(WAIT_TIME_MS));
-        HKS_LOG_I("iter stub refcount: %{public}d", connection->GetSptrRefCount());
-        waitIteration--;
-        if (waitIteration == 0) {
-            HKS_LOG_E("waitIteration is 0, but stub refcount is not 1.");
-        }
-    }
-}
-
-static void DisconnectAndCleanup(sptr<ExtensionConnection> &connection, const ProviderInfo &providerInfo)
-{
-    if (IsConnectionShared(connection)) {
-        HKS_LOG_I("Connection still in use, skip disconnect for: %" LOG_PUBLIC "s",
-            providerInfo.m_providerName.c_str());
-        return;
-    }
-    connection->OnDisconnect(connection);
-    WaitAmsReleaseStub(connection);
-}
-
-static std::vector<ProviderInfo> FindMatchingProviders(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet)
-{
-    std::string bundleName;
-    if (HksGetBundleNameFromUid(processInfo.uidInt, bundleName) != HKS_SUCCESS) {
-        return {};
-    }
-
-    auto abilityName = paramSet.GetParam<HKS_EXT_CRYPTO_TAG_ABILITY_NAME>();
-    bool hasAbilityName = abilityName.first == HKS_SUCCESS && abilityName.second.size() < MAX_ABILITY_NAME_LEN;
-    std::string abilityNameStr{};
-    if (hasAbilityName) {
-        abilityNameStr = std::string(abilityName.second.begin(), abilityName.second.end());
-    }
-
-    std::vector<ProviderInfo> result{};
-    g_extensionConnectionMap.Iterate([&](const ProviderInfo &providerInfo, sptr<ExtensionConnection> &) {
-        if (providerInfo.m_bundleName == bundleName && providerInfo.m_providerName == providerName &&
-            providerInfo.m_userid == processInfo.userIdInt &&
-            (!hasAbilityName || providerInfo.m_abilityName == abilityNameStr)) {
-            result.push_back(providerInfo);
-        }
-    });
-    return result;
-}
-
-static void DisconnectExtensionConnections(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet)
-{
-    auto toDisconnect = FindMatchingProviders(processInfo, providerName, paramSet);
-
-    for (const auto &providerInfo : toDisconnect) {
-        sptr<ExtensionConnection> connection{};
-        g_extensionConnectionMap.Find(providerInfo, connection);
-        g_extensionConnectionMap.Erase(providerInfo);
-
-        if (connection != nullptr) {
-            DisconnectAndCleanup(connection, providerInfo);
-        }
-    }
 }
 
 }

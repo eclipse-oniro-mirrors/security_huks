@@ -174,6 +174,7 @@ int32_t HksQueryAbilityCopyResult(const struct HksBlob *resourceId, const struct
         abilityInfo->abilityName.data, abilityInfo->abilityName.size);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INSUFFICIENT_MEMORY, "querying copy abilityName fail in client")
     outHksAbilityInfo->abilityName.size = abilityInfo->abilityName.size;
+    outHksAbilityInfo->abilityType = abilityInfo->abilityType;
 
     return HKS_SUCCESS;
 }

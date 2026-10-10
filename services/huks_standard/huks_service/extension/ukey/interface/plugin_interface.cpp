@@ -26,6 +26,7 @@
 #include <vector>
 #include "hks_plugin_def.h"
 #include "iremote_object.h"
+#include "hks_task_executor.h"
 
 namespace OHOS::Security::Huks {
 
@@ -332,17 +333,51 @@ __attribute__((visibility("default"))) int32_t HksExtPluginOnGetResourceId(const
     return ret;
 }
 
-__attribute__((visibility("default"))) int32_t HksExtPluginOnSetExtensionProxy(const HksProcessInfo &processInfo,
-    const std::string &providerName, const CppParamSet &paramSet, void *remoteObjectRaw)
+// ==================== Shared thread pool hookup (ukey async refactor) ====================
+
+// SO-level thread-pool singleton: constructed in LoadedIdle state (no threads created);
+// Start() is invoked at the end of the successful registration path (idempotent);
+// Stop is triggered by the SA-side delayed-dlclose thread via HksExtPluginStopTaskExecutor()
+// (before dlclose).
+static OHOS::Security::Hks::HksTaskExecutor g_taskExecutor(OHOS::Security::Hks::HksTaskExecutor::Config{});
+
+__attribute__((visibility("default"))) OHOS::Security::Hks::HksTaskExecutor *HksExtPluginGetTaskExecutor()
 {
-    HKS_LOG_I("enter %" LOG_PUBLIC "s", __PRETTY_FUNCTION__);
-    auto remoteObject = sptr<IRemoteObject>(static_cast<IRemoteObject*>(remoteObjectRaw));
-    HKS_IF_TRUE_LOGE_RETURN(remoteObject == nullptr, HKS_ERROR_NULL_POINTER, "remoteObject is nullptr")
-    auto providerMgr = HksProviderLifeCycleManager::GetInstanceWrapper();
-    HKS_IF_TRUE_LOGE_RETURN(providerMgr == nullptr, HKS_ERROR_NULL_POINTER, "providerMgr is null");
-    auto ret = providerMgr->OnSetExtensionProxy(processInfo, providerName, paramSet, remoteObject);
-    HKS_LOG_I("leave %" LOG_PUBLIC "s, ret = %" LOG_PUBLIC "d", __FUNCTION__, ret);
-    return ret;
+    return &g_taskExecutor; // usable right after dlopen; Submit returns STOPPED before Start
+}
+
+__attribute__((visibility("default"))) int32_t HksExtPluginStartTaskExecutor()
+{
+    // invoked by the host at the end of the successful registration path (after the host-side
+    // Dispatch returns success); idempotent
+    g_taskExecutor.Start();
+    return HKS_SUCCESS;
+}
+
+__attribute__((visibility("default"))) int32_t HksExtPluginStopTaskExecutor()
+{
+    // only the SA-side delayed-dlclose thread may call this (not Worker threads, not inline
+    // from SO-exported functions). Stop() blocks at most the longest in-flight execution
+    // (<=60s) plus queued-task cleanup; the caller must budget accordingly.
+    g_taskExecutor.Stop();
+    return HKS_SUCCESS;
+}
+
+// extern "C" aliases (for the host-side dlsym: C symbol names are stable and unaffected by
+// compiler mangling differences)
+extern "C" __attribute__((visibility("default"))) OHOS::Security::Hks::HksTaskExecutor *HksExtPluginGetTaskExecutorC()
+{
+    return HksExtPluginGetTaskExecutor();
+}
+
+extern "C" __attribute__((visibility("default"))) int32_t HksExtPluginStartTaskExecutorC()
+{
+    return HksExtPluginStartTaskExecutor();
+}
+
+extern "C" __attribute__((visibility("default"))) int32_t HksExtPluginStopTaskExecutorC()
+{
+    return HksExtPluginStopTaskExecutor();
 }
 
 }

@@ -50,7 +50,6 @@ enum class PluginMethodEnum {
     FUNC_ON_QUERY_ABILITY,
     FUNC_ON_GET_RESOURCE_ID,
     FUNC_ON_SET_OR_GET_REMOTE_PROPERTY,
-    FUNC_ON_SET_EXTENSION_PROXY,
 
     COUNT,
 };
@@ -97,8 +96,6 @@ using OnQueryAbilityFunc = int32_t (*)(const struct HksProcessInfo &processInfo,
     CppAbilityInfo &abilityInfo);
 using OnGetResourceIdFunc = int32_t (*)(const HksProcessInfo &processInfo, const std::string &providerName,
     const CppParamSet &paramSet, std::string &resourceId, struct HksExternalErrorInfo **errInfo);
-using OnSetExtensionProxyFunc = int32_t (*)(const HksProcessInfo &processInfo, const std::string &providerName,
-    const CppParamSet &paramSet, void *remoteObjectRaw);
 }
 }
 }

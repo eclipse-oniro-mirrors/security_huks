@@ -19,7 +19,8 @@
 
 CppAbilityInfo::CppAbilityInfo(const struct HksAbilityInfo *abilityInfo)
     : bundleName(reinterpret_cast<const char*>(abilityInfo->bundleName.data), abilityInfo->bundleName.size),
-    abilityName(reinterpret_cast<const char*>(abilityInfo->abilityName.data), abilityInfo->abilityName.size)
+    abilityName(reinterpret_cast<const char*>(abilityInfo->abilityName.data), abilityInfo->abilityName.size),
+    abilityType(abilityInfo->abilityType)
 {
     HKS_LOG_D("abilityInfo have change to cpp");
 }

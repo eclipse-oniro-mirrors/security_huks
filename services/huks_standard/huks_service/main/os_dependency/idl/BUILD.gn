@@ -28,9 +28,13 @@ config("huks_config") {
 config("idl_export_core_includes") {
   include_dirs = [ 
     "//base/security/huks/services/huks_standard/huks_service/main/core/include",
-    "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/inc",
     "//base/security/huks/services/huks_standard/huks_service/main/systemapi_wrap/se/include",
   ]
+  if (huks_enable_ukey_config == true) {
+    include_dirs += [
+      "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/inc",
+    ]
+  }
 }
 
 if (os_level == "standard") {

@@ -254,9 +254,21 @@ int32_t ParseAbilityInfoArrayFromJson(const std::string &jsonStr, std::vector<Ab
         HKS_IF_TRUE_LOGE_RETURN(indexObj.first != HKS_SUCCESS || indexObj.second.size() > MAX_INDEX_LEN,
             HKS_ERROR_INVALID_ARGUMENT, "Get abilityName from json element failed at index: %" LOG_PUBLIC "d", i)
 
+        int32_t abilityType = 0;
+        auto abilityTypeObj = element.GetValue(ABILITY_TYPE_KEY).ToNumber<int32_t>();
+        if (abilityTypeObj.first == HKS_SUCCESS) {
+            HKS_IF_TRUE_LOGE_RETURN(abilityTypeObj.second < 0 || abilityTypeObj.second > 1,
+                HKS_ERROR_INVALID_ARGUMENT, "abilityType invalid at index: %" LOG_PUBLIC "d", i)
+            abilityType = abilityTypeObj.second;
+        } else {
+            HKS_IF_TRUE_LOGE_RETURN(abilityTypeObj.first != HKS_ERROR_JSON_KEY_NOT_FOUND,
+                HKS_ERROR_INVALID_ARGUMENT, "abilityType is not a number at index: %" LOG_PUBLIC "d", i)
+        }
+
         AbilityInfo abilityInfo{};
         abilityInfo.abilityName = std::string(abilityNameObj.second);
         abilityInfo.index = std::string(indexObj.second);
+        abilityInfo.abilityType = abilityType;
         abilityInfoArray.push_back(abilityInfo);
     }
     

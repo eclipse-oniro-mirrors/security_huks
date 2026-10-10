@@ -83,15 +83,17 @@ public:
 
 private:
     std::atomic<int32_t> m_refCount{0};
+    std::atomic<uint32_t> m_dlcloseGeneration{0};
     std::mutex soMutex{};
     OHOS::SafeMap<PluginMethodEnum, void*> m_pluginProviderMap{};
+    // delayed dlclose (body of the detached thread spawned by UnRegisterProvider; stops the SO
+    // thread pool first, then confirms the unload a second time)
+    void DelayedDlclose(uint32_t gen);
     int32_t OnUnregisterAllObservers();
     int32_t OnRegistProvider(const HksProcessInfo &processInfo,
         const std::string &providerName, const CppParamSet &paramSet, std::function<void(HksProcessInfo)> callback);
     int32_t OnUnRegistProvider(const HksProcessInfo &processInfo,
         const std::string &providerName, const CppParamSet &paramSet, bool isdeath, int32_t &deleteCount);
-    int32_t OnSetExtProxy(const HksProcessInfo &processInfo,
-        const std::string &providerName, const CppParamSet &paramSet, void *remoteObjectRaw);
 };
 
 }

@@ -48,9 +48,37 @@
 #ifdef L2_STANDARD
 #ifdef HKS_SUPPORT_ACCESS_TOKEN
 using namespace OHOS;
+
+// ukey async refactor: worker threads have no IPC context, so IPCSkeleton::GetCalling* falls
+// back to the service's own identity (GetCallingFullTokenID -> GetSelfTokenID) and token
+// checks would misjudge the caller. Uniformly read the thread token slot first (the caller's
+// real tokenIDEx injected by the IPC thread on admission, see HksSetThreadFullTokenIdOverride),
+// and only fall back to IPCSkeleton when it was not injected (sync path).
+static uint64_t HksGetEffectiveCallingFullTokenId()
+{
+    uint64_t overrideTokenId = HksGetThreadFullTokenIdOverride();
+    return (overrideTokenId != 0) ? overrideTokenId : IPCSkeleton::GetCallingFullTokenID();
+}
+
+static uint32_t HksGetEffectiveCallingTokenId()
+{
+    uint64_t overrideTokenId = HksGetThreadFullTokenIdOverride();
+    return (overrideTokenId != 0) ? static_cast<uint32_t>(overrideTokenId)
+                                  : IPCSkeleton::GetCallingTokenID();
+}
+
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
+static uint32_t HksGetEffectiveCallingUid()
+{
+    const struct HksProcessInfo *overrideInfo = HksGetThreadIdentityOverride();
+    return (overrideInfo != nullptr) ? overrideInfo->uidInt
+                                     : static_cast<uint32_t>(IPCSkeleton::GetCallingUid());
+}
+#endif
+
 int32_t SensitivePermissionCheck(const char *permission)
 {
-    OHOS::Security::AccessToken::AccessTokenID tokenId = IPCSkeleton::GetCallingTokenID();
+    OHOS::Security::AccessToken::AccessTokenID tokenId = HksGetEffectiveCallingTokenId();
     int result = OHOS::Security::AccessToken::AccessTokenKit::VerifyAccessToken(tokenId, permission);
     if (result == OHOS::Security::AccessToken::PERMISSION_GRANTED) {
         HKS_LOG_D("Check Permission success!");
@@ -64,12 +92,12 @@ int32_t SensitivePermissionCheck(const char *permission)
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
 int32_t CheckUkeyAuthPinType(void)
 {
-    auto callingUid = IPCSkeleton::GetCallingUid();
+    auto callingUid = HksGetEffectiveCallingUid();
     if (callingUid == ENTERPRISE_AUTH_UID) {
         return HKS_SUCCESS;
     }
 
-    auto accessTokenIDEx = IPCSkeleton::GetCallingFullTokenID();
+    auto accessTokenIDEx = HksGetEffectiveCallingFullTokenId();
     auto tokenType = OHOS::Security::AccessToken::AccessTokenKit::GetTokenTypeFlag(
         static_cast<OHOS::Security::AccessToken::AccessTokenID>(accessTokenIDEx));
     switch (tokenType) {
@@ -87,7 +115,7 @@ int32_t CheckUkeyAuthPinType(void)
 
 int32_t HksCheckUkeyPermission(const char *permission)
 {
-    OHOS::Security::AccessToken::AccessTokenID tokenId = IPCSkeleton::GetCallingTokenID();
+    OHOS::Security::AccessToken::AccessTokenID tokenId = HksGetEffectiveCallingTokenId();
     int result = OHOS::Security::AccessToken::AccessTokenKit::VerifyAccessToken(tokenId, permission);
     if (result == OHOS::Security::AccessToken::PERMISSION_GRANTED) {
         HKS_LOG_D("Check Ukey Permission success!");
@@ -123,7 +151,7 @@ bool HksIsTrustedUkeySaCaller(uint32_t callingUid)
 namespace {
 static int32_t CheckTokenType(void)
 {
-    auto accessTokenIDEx = IPCSkeleton::GetCallingFullTokenID();
+    auto accessTokenIDEx = HksGetEffectiveCallingFullTokenId();
     auto tokenType = OHOS::Security::AccessToken::AccessTokenKit::GetTokenTypeFlag(
         static_cast<OHOS::Security::AccessToken::AccessTokenID>(accessTokenIDEx));
     switch (tokenType) {

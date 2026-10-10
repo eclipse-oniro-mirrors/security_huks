@@ -27,6 +27,10 @@ extern "C" {
 
 int32_t HksCheckIsUkeyOperation(const struct HksParamSet *paramSet, int32_t *outRet);
 
+// ukey timeout tag selection (shared by client and server, single source of truth):
+// reused standard codes -> HKS_TAG_TIME_OUT(529); ukey native codes -> HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
+enum HksTag HksUkeyTimeoutTagByMsgCode(uint32_t msgCode);
+
 #ifdef __cplusplus
 }
 #endif

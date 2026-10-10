@@ -105,6 +105,15 @@ static int32_t TestRemoteRequest(uint32_t code, bool hasOutData = false)
     bool isAsyncReply = (code == HKS_MSG_ATTEST_KEY_ASYNC_REPLY ||
         code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY);
 
+    // buffer-first layout [outSize][inLen][inData][callback object?] consistent with the
+    // client/server: the inBlob buffer is written first (WriteBuffer; the server reads it with
+    // the paired ReadUnpadBuffer), then the callback object
+    if (!data.WriteBuffer(inBlob.data, static_cast<size_t>(inBlob.size))) {
+        HKS_FREE_BLOB(inBlob);
+        HKS_FREE_BLOB(outBlob);
+        return HKS_ERROR_BAD_STATE;
+    }
+
     if (isAsyncReply || code == HKS_MSG_INIT) {
         sptr<HksStub> callback = new (std::nothrow) HksStub();
         if (callback == nullptr) {
@@ -117,12 +126,6 @@ static int32_t TestRemoteRequest(uint32_t code, bool hasOutData = false)
             HKS_FREE_BLOB(outBlob);
             return HKS_ERROR_IPC_MSG_FAIL;
         }
-    }
-
-    if (!data.WriteBuffer(inBlob.data, static_cast<size_t>(inBlob.size))) {
-        HKS_FREE_BLOB(inBlob);
-        HKS_FREE_BLOB(outBlob);
-        return HKS_ERROR_BAD_STATE;
     }
 
     hksService.OnRemoteRequest(code, data, reply, option);

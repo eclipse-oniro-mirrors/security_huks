@@ -86,11 +86,6 @@ static int32_t SetupProvider(std::shared_ptr<HksProviderLifeCycleManager> provid
     std::function<void(HksProcessInfo)> callback)
 {
     auto ret = providerMgr->OnRegisterProvider(processInfo, providerName, paramSet, callback);
-    if (ret != HKS_SUCCESS) {
-        return ret;
-    }
-    sptr<IRemoteObject> remoteObj = CreateMockRemoteObject();
-    ret = providerMgr->OnSetExtensionProxy(processInfo, providerName, paramSet, remoteObj);
     return ret;
 }
 

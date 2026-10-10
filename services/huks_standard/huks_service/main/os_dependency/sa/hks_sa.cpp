@@ -63,6 +63,12 @@
 #include <dirent.h>
 #endif
 
+#include "hks_param.h"
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
+#include "hks_ukey_async_submit.h"
+#endif
+#include "hks_ukey_check.h"
+
 std::atomic_uint32_t g_sessionId = 0;
 
 namespace OHOS {
@@ -220,16 +226,92 @@ static int32_t ProcessAsyncReplyMessage(uint32_t code, const struct HksBlob &src
     return HKS_SUCCESS;
 }
 
-static int32_t ProcessAttestOrNormalMessage(
-    uint32_t code, uint32_t outSize, const struct HksBlob &srcData, MessageParcel &reply,
-    const sptr<IRemoteObject> &remoteObject)
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
+// ukey async refactor (dual-mode server): the coverage set is judged before every legacy
+// branch — callback object present -> async submit (admission + thread pool + callback
+// delivery); absent (legacy client) -> return false and take the legacy path verbatim.
+// Must come before the legacy INIT block (otherwise the callback object is consumed by the
+// death-notification logic)
+static bool TrySubmitUkeyAsyncIfMatch(uint32_t code, MessageParcel &data, uint32_t outSize,
+    const struct HksBlob &srcData, MessageParcel &reply)
 {
+    bool isUkeyMsg = false;
+    switch (code) {
+        case HKS_MSG_EXT_AUTH_UKEY_PIN:
+        case HKS_MSG_EXT_GET_UKEY_PIN_AUTH_STATE:
+        case HKS_MSG_EXT_OPEN_REMOTE_HANDLE:
+        case HKS_MSG_EXT_CLOSE_REMOTE_HANDLE:
+        case HKS_MSG_EXT_CLEAR_PIN_AUTH_STATE:
+        case HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES:
+        case HKS_MSG_EXT_EXPORT_CERTIFICATE:
+        case HKS_MSG_EXT_IMPORT_CERTIFICATE:
+        // SET_OR_GET_REMOTE_PROPERTY is excluded (both old and new clients write a callback,
+        // so dual-mode cannot be judged; the adapter's direct-reply style conflicts with the
+        // unified delivery protocol) — its existing dedicated branch is kept (the legacy path
+        // below)
+        case HKS_MSG_EXT_QUERY_ABILITY_INFO:
+        case HKS_MSG_EXT_GET_RESOURCE_ID:
+            isUkeyMsg = true;
+            break;
+        default:
+            break;
+    }
+    if (!isUkeyMsg && (code == HKS_MSG_GEN_KEY || code == HKS_MSG_EXPORT_PUBLIC_KEY ||
+        code == HKS_MSG_IMPORT_WRAPPED_KEY || code == HKS_MSG_INIT || code == HKS_MSG_UPDATE ||
+        code == HKS_MSG_FINISH || code == HKS_MSG_ABORT)) {
+        // reused standard codes: the operation is a ukey operation only when the paramSet
+        // carries KEY_CLASS==EXTENSION. The judgement goes through the submit module (which
+        // correctly unpacks the paramSet embedded in srcData — srcData is a packed buffer, not
+        // a raw paramSet)
+        isUkeyMsg = OHOS::Security::Hks::HksIsUkeyStandardMsgCode(code, srcData);
+    }
+    HKS_LOG_I("ukey msg check, code=%u isUkey=%d", code, isUkeyMsg ? 1 : 0);
+    if (!isUkeyMsg) {
+        return false;
+    }
+    if (OHOS::Security::Hks::HksTrySubmitUkeyAsyncMsg(code, data, outSize, srcData,
+        reinterpret_cast<const uint8_t *>(&reply))) {
+        // async ukey INIT must also register a death recipient (the legacy block is skipped, so
+        // the session would leak when the client dies — registration is added for the callback
+        // stub after admission succeeds)
+        if (code == HKS_MSG_INIT) {
+            // the death-notification object hangs on the client callback stub: stub death =
+            // client process death (HksDeathRecipient is defined in this file; onDied cleans up
+            // sessions and caches). Note: HksTrySubmitUkeyAsyncMsg has already consumed the
+            // callback object from the parcel, so registration via the stub held by the task is
+            // unreachable (it is local to submit) — simplified approach: async-INIT session
+            // cleanup relies on the Extension-side timeout and the unregister path, and death-
+            // recipient registration is deferred to batch 5 (recorded).
+            HKS_LOG_I("ukey async init accepted, death-recipient registration deferred");
+        }
+        return true; // admitted (async path done); the outer layer sends the admission receipt
+    }
+    // callback absent -> legacy client; continue with the legacy path below (non-ukey standard
+    // codes also fall back here)
+    return false;
+}
+#endif
+
+static int32_t ProcessAttestOrNormalMessage(
+    uint32_t code, MessageParcel &data, uint32_t outSize, const struct HksBlob &srcData, MessageParcel &reply)
+{
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
+    if (TrySubmitUkeyAsyncIfMatch(code, data, outSize, srcData, reply)) {
+        return HKS_SUCCESS; // admitted (async path done); the outer layer sends the admission receipt
+    }
+#endif
+
     // Since we have wrote a HksStub instance in client side, we can now read it if it is anonymous attestation.
     if (code == HKS_MSG_ATTEST_KEY) {
         HksIpcServiceAttestKey(reinterpret_cast<const HksBlob *>(&srcData),
             reinterpret_cast<const uint8_t *>(&reply), nullptr);
         return HKS_SUCCESS;
     } else if (code == HKS_MSG_INIT) {
+        // layout is buffer-first: [outSize][inLen][inData][callback object], so the callback
+        // object must be parsed after the buffer is read (the paired ReadUnpadBuffer already
+        // skips WriteBuffer's 4-byte padding). Async ukey INIT has already consumed the callback
+        // object in TrySubmitUkeyAsyncIfMatch and returned early, so it never reaches this block.
+        sptr<IRemoteObject> remoteObject = data.ReadRemoteObject();
         if (remoteObject != HKS_NULL_POINTER) {
             int32_t callingPid = IPCSkeleton::GetCallingPid();
             int32_t callingUid = IPCSkeleton::GetCallingUid();
@@ -261,28 +343,35 @@ static void ProcessRemoteRequest(uint32_t code, MessageParcel &data, MessageParc
         HKS_IF_TRUE_LOGE_BREAK(!data.ReadUint32(srcData.size) || IsInvalidLength(srcData.size),
             "srcData size is invalid, size:%" LOG_PUBLIC "u", srcData.size)
 
-        // Read remoteObject before buffer to avoid byte misalignment caused by variable-length buffer,
-        // which leads to ReadRemoteObject returning null and death recipient not being added.
-        sptr<IRemoteObject> remoteObject = nullptr;
-        bool isAsyncReply = (code == HKS_MSG_ATTEST_KEY_ASYNC_REPLY ||
-            code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY);
-        if (code == HKS_MSG_ATTEST_KEY_ASYNC_REPLY || code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY ||
-            code == HKS_MSG_INIT) {
-            remoteObject = data.ReadRemoteObject();
-        }
-
         ret = HKS_ERROR_MALLOC_FAIL;
         srcData.data = static_cast<uint8_t *>(HksMalloc(srcData.size));
         HKS_IF_NULL_LOGE_BREAK(srcData.data, "Malloc srcData failed.")
 
         ret = HKS_ERROR_IPC_MSG_FAIL;
-        const uint8_t *pdata = data.ReadBuffer(static_cast<size_t>(srcData.size));
+        // the client writes inBlob with WriteCommonRequestData using WriteBuffer (auto 4-byte
+        // padding); ReadBuffer not skipping the padding would misalign the cursor for the
+        // subsequent ReadRemoteObject (the ukey callback object would read as nullptr ->
+        // misjudged as a legacy client on the legacy sync path). ReadUnpadBuffer must be used as
+        // the paired read.
+        const uint8_t *pdata = data.ReadUnpadBuffer(static_cast<size_t>(srcData.size));
         HKS_IF_NULL_BREAK(pdata)
         (void)memcpy_s(srcData.data, srcData.size, pdata, srcData.size);
+
+        // unified buffer-first layout [outSize][inLen][inData][callback object]: callback
+        // objects (ukey async callback / anonymous-attestation callback / SET_OR_GET callback /
+        // INIT death-notification object) always sit after the buffer and must be parsed after
+        // the buffer is read. Among them, the ukey async callback and the INIT death-
+        // notification object are consumed by TrySubmitUkeyAsyncIfMatch / the INIT block inside
+        // ProcessAttestOrNormalMessage (TrySubmit must precede the INIT block, otherwise the
+        // callback is consumed early); only the other two (anonymous attestation / SET_OR_GET)
+        // are handled here.
+        bool isAsyncReply = (code == HKS_MSG_ATTEST_KEY_ASYNC_REPLY ||
+            code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY);
         if (isAsyncReply) {
+            sptr<IRemoteObject> remoteObject = data.ReadRemoteObject();
             ret = ProcessAsyncReplyMessage(code, srcData, reply, remoteObject);
         } else {
-            ret = ProcessAttestOrNormalMessage(code, outSize, srcData, reply, remoteObject);
+            ret = ProcessAttestOrNormalMessage(code, data, outSize, srcData, reply);
         }
     } while (0);
 

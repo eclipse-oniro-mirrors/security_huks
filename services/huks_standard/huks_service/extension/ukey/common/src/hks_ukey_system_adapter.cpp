@@ -18,8 +18,7 @@
 #include "hks_template.h"
 #include "os_account_manager.h"
 #include "accesstoken_kit.h"
-#include "tokenid_kit.h"
-#include "ipc_skeleton.h"
+#include <cinttypes>
 
 namespace OHOS::Security::Huks {
 
@@ -34,6 +33,27 @@ int32_t HksGetFrontUserId(int32_t &outId)
     return HKS_SUCCESS;
 }
 
+bool HksIsCallerSystemApp(const HksProcessInfo *processInfo)
+{
+    HKS_IF_NULL_LOGE_RETURN(processInfo, false, "HksIsCallerSystemApp: processInfo null")
+    if (processInfo->accessTokenId == 0) {
+        HKS_LOG_E("HksIsCallerSystemApp: caller accessTokenId is zero");
+        return false;
+    }
+    // tokenAttr matches the high 32 bits of the full tokenIDEx (accesstoken_info_manager.cpp
+    // sets tokenIdEx.tokenIdExStruct.tokenAttr |= SYSTEM_APP_FLAG when creating the token),
+    // SYSTEM_APP_FLAG = 0x1. Hence (hapInfo.tokenAttr & 0x1) is bit-equivalent to the
+    // pre-refactor IsSystemAppByFullTokenID(caller's full token).
+    constexpr unsigned int SYSTEM_APP_FLAG = 0x0001;
+    OHOS::Security::AccessToken::HapTokenInfo hapInfo;
+    int ret = OHOS::Security::AccessToken::AccessTokenKit::GetHapTokenInfo(
+        static_cast<OHOS::Security::AccessToken::AccessTokenID>(processInfo->accessTokenId), hapInfo);
+    HKS_IF_TRUE_LOGE_RETURN(ret != OHOS::ERR_OK || (hapInfo.tokenAttr & SYSTEM_APP_FLAG) == 0, false,
+        "HksIsCallerSystemApp: not system hap, ret=%" LOG_PUBLIC "d accessTokenId=%" LOG_PUBLIC PRIu64,
+        ret, processInfo->accessTokenId)
+    return true;
+}
+
 int32_t VerifyCallerAndAdjustUidParam(const HksProcessInfo &processInfo, const CppParamSet &paramSet,
     CppParamSet &newParamSet)
 {
@@ -46,10 +66,8 @@ int32_t VerifyCallerAndAdjustUidParam(const HksProcessInfo &processInfo, const C
         HKS_IF_NULL_LOGE_RETURN(newParamSet.GetParamSet(), HKS_ERROR_NULL_POINTER, "new paramset fail.")
         return HKS_SUCCESS;
     }
-    auto accessTokenIDEx = IPCSkeleton::GetCallingFullTokenID();
-    HKS_IF_NOT_TRUE_LOGE_RETURN(OHOS::Security::AccessToken::TokenIdKit::IsSystemAppByFullTokenID(accessTokenIDEx),
-        HKS_ERROR_UKEY_NOT_SYSTEM_APP, "VerifyCallerAndAdjustUidParam: not system hap, check permission failed.");
-    
+    HKS_IF_NOT_TRUE_LOGE_RETURN(HksIsCallerSystemApp(&processInfo), HKS_ERROR_UKEY_NOT_SYSTEM_APP,
+        "VerifyCallerAndAdjustUidParam: not system hap, check permission failed.")
     newParamSet = CppParamSet(paramSet);
     return HKS_SUCCESS;
 }

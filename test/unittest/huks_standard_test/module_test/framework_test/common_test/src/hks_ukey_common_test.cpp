@@ -207,4 +207,70 @@ HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest003, TestSize.Level0)
     HksClearThreadExtErrMsg();
 }
 
+/**
+ * @tc.name: HksUkeyCommonTest.HksUkeyCommonTest004
+ * @tc.desc: tdd HksUkeyTimeoutTagByMsgCode — reused standard 7 codes read
+ *           HKS_TAG_TIME_OUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest004, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksUkeyCommonTest004");
+
+    /* reused standard 7 codes -> HKS_TAG_TIME_OUT(529) */
+    const uint32_t stdCodes[] = {
+        HKS_MSG_GEN_KEY, HKS_MSG_EXPORT_PUBLIC_KEY, HKS_MSG_IMPORT_WRAPPED_KEY,
+        HKS_MSG_INIT, HKS_MSG_UPDATE, HKS_MSG_FINISH, HKS_MSG_ABORT
+    };
+    for (uint32_t code : stdCodes) {
+        EXPECT_EQ(HksUkeyTimeoutTagByMsgCode(code), HKS_TAG_TIME_OUT);
+    }
+
+    /* ukey-native extension codes -> HKS_EXT_CRYPTO_TAG_TIMEOUT(200006) */
+    const uint32_t extCodes[] = {
+        HKS_MSG_EXT_AUTH_UKEY_PIN, HKS_MSG_EXT_GET_UKEY_PIN_AUTH_STATE,
+        HKS_MSG_EXT_OPEN_REMOTE_HANDLE, HKS_MSG_EXT_CLOSE_REMOTE_HANDLE,
+        HKS_MSG_EXT_CLEAR_PIN_AUTH_STATE, HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES,
+        HKS_MSG_EXT_EXPORT_CERTIFICATE, HKS_MSG_EXT_IMPORT_CERTIFICATE,
+        HKS_MSG_EXT_QUERY_ABILITY_INFO, HKS_MSG_EXT_GET_RESOURCE_ID
+    };
+    for (uint32_t code : extCodes) {
+        EXPECT_EQ(HksUkeyTimeoutTagByMsgCode(code), HKS_EXT_CRYPTO_TAG_TIMEOUT);
+    }
+
+    /* message codes outside the coverage set (defensive default) -> 200006 */
+    EXPECT_EQ(HksUkeyTimeoutTagByMsgCode(HKS_MSG_ATTEST_KEY_ASYNC_REPLY),
+        HKS_EXT_CRYPTO_TAG_TIMEOUT);
+}
+
+/**
+ * @tc.name: HksUkeyCommonTest.HksUkeyCommonTest005
+ * @tc.desc: tdd HKS_TAG_TIME_OUT is registered in HKS_VALID_TAGS — KEY_CLASS_EXTENSION +
+ *           529 passes HksCheckParamSetValidity in the same paramSet and the ukey check
+ *           succeeds (a prerequisite of HksCheckIsUkeyOperation; if unregistered the whole
+ *           thing fails and falls back to the legacy path)
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest005, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksUkeyCommonTest005");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_KEY_CLASS, .uint32Param = HKS_KEY_CLASS_EXTENSION },
+        { .tag = HKS_TAG_TIME_OUT, .uint32Param = 10 },
+    };
+    ret = HksAddParams(paramSet, params, 2);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    EXPECT_EQ(HksCheckParamSetValidity(paramSet), HKS_SUCCESS);
+    int32_t outRet = HKS_SUCCESS;
+    EXPECT_EQ(HksCheckIsUkeyOperation(paramSet, &outRet), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
 }
