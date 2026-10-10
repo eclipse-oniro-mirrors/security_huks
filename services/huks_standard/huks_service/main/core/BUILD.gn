@@ -45,8 +45,12 @@ if (os_level == "standard") {
       "//base/security/huks/services/huks_standard/huks_service/main/systemapi_wrap/se/include",
       "//base/security/huks/services/huks_standard/huks_service/main/systemapi_wrap/bms/include",
       "//base/security/huks/frameworks/huks_standard/main/common/include",
-      "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/inc",
     ]
+    if (huks_enable_ukey_config == true) {
+      include_dirs += [
+        "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/inc",
+      ]
+    }
 
     sources = [
       "//base/security/huks/services/huks_standard/huks_service/main/hks_storage/src/hks_storage.c",

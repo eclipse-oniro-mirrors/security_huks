@@ -33,12 +33,16 @@ if (os_level == "standard") {
       "//base/security/huks/services/huks_standard/huks_service/main/upgrade/core:libhuks_upgrade_core_static",
       "//base/security/huks/services/huks_standard/huks_service/main/upgrade/lock:libhuks_upgrade_lock_static",
       "//base/security/huks/utils/mutex:libhuks_utils_mutex_static",
-      "//base/security/huks/services/huks_standard/huks_service/main/extension_plugin_manger:libhuks_ukey_plugin_extension_static",
-      # ukey async refactor: the task header propagates IDL-generated headers
-      # (hks_ext_error_info.h / ihuks_access_ext_base.h), whose gen directory is spread via
-      # the ukey/common public_configs
-      "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common:libhuks_ukey_common_static",
     ]
+    if (huks_enable_ukey_config == true) {
+      deps += [
+        "//base/security/huks/services/huks_standard/huks_service/main/extension_plugin_manger:libhuks_ukey_plugin_extension_static",
+        # ukey async refactor: the task header propagates IDL-generated headers
+        # (hks_ext_error_info.h / ihuks_access_ext_base.h), whose gen directory is spread via
+        # the ukey/common public_configs
+        "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common:libhuks_ukey_common_static",
+      ]
+    }
     public_deps = [ "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/idl:libhuks_service_idl_standard_static" ]
 
     complete_static_lib = true
@@ -59,13 +63,16 @@ if (os_level == "standard") {
       "posix/hks_rwlock.c",
       "sa/hks_dcm_callback_handler.cpp",
       "sa/hks_sa.cpp",
-      "sa/hks_ukey_async_submit.cpp",
       "sa/hks_message_handler_find.c",
       "sa/hks_xcollie.cpp",
 
       # both client side and server side will include hks_sa_interface.cpp
       "sa/hks_sa_interface.cpp",
     ]
+
+    if (huks_enable_ukey_config == true) {
+      sources += [ "sa/hks_ukey_async_submit.cpp" ]
+    }
 
     if (huks_enable_upgrade_key_storage_secure_level) {
       sources += [ "sa/hks_osaccount_check.cpp" ]
@@ -104,15 +111,19 @@ if (os_level == "standard") {
       "//base/security/huks/frameworks/config/build:l2_standard_common_config",
     ]
     include_dirs = [
-      # ukey async refactor: submit needs the task class (ukey_client_service) and the
-      # thread-pool header (common)
-      "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/inc",
       "//base/security/huks/frameworks/huks_standard/main/common/include",
-      # the task header also propagates proxy resolver / ukey common (ProviderInfo); the sa
-      # directory (hks_message_handler.h)
-      "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common/inc",
       "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/sa",
     ]
+    if (huks_enable_ukey_config == true) {
+      include_dirs += [
+        # ukey async refactor: submit needs the task class (ukey_client_service) and the
+        # thread-pool header (common)
+        "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/inc",
+        # the task header also propagates proxy resolver / ukey common (ProviderInfo); the sa
+        # directory (hks_message_handler.h)
+        "//base/security/huks/services/huks_standard/huks_service/extension/ukey/common/inc",
+      ]
+    }
     external_deps += [
       "hicollie:libhicollie",
       "hilog:libhilog",
