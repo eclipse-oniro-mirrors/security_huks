@@ -59,7 +59,7 @@ constexpr uint32_t HKS_UKEY_ASYNC_WAIT_MARGIN = 15;
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
 // Timeout parsing: tag unit is seconds; 0/unset = uniform default 60s; >900 rejected (the check
 // happens before sending). The tag is selected per code layout: reused standard-code ukey
-// operations read HKS_TAG_TIME_OUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
+// operations read HKS_TAG_TIMEOUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
 // (HksUkeyTimeoutTagByMsgCode is the single source of truth).
 int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInterfaceCode msgCode,
     uint32_t *timeout)

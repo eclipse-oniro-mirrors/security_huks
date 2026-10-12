@@ -210,20 +210,20 @@ HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest003, TestSize.Level0)
 /**
  * @tc.name: HksUkeyCommonTest.HksUkeyCommonTest004
  * @tc.desc: tdd HksUkeyTimeoutTagByMsgCode — reused standard 7 codes read
- *           HKS_TAG_TIME_OUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
+ *           HKS_TAG_TIMEOUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
  * @tc.type: FUNC
  */
 HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest004, TestSize.Level0)
 {
     HKS_LOG_I("enter HksUkeyCommonTest004");
 
-    /* reused standard 7 codes -> HKS_TAG_TIME_OUT(529) */
+    /* reused standard 7 codes -> HKS_TAG_TIMEOUT(529) */
     const uint32_t stdCodes[] = {
         HKS_MSG_GEN_KEY, HKS_MSG_EXPORT_PUBLIC_KEY, HKS_MSG_IMPORT_WRAPPED_KEY,
         HKS_MSG_INIT, HKS_MSG_UPDATE, HKS_MSG_FINISH, HKS_MSG_ABORT
     };
     for (uint32_t code : stdCodes) {
-        EXPECT_EQ(HksUkeyTimeoutTagByMsgCode(code), HKS_TAG_TIME_OUT);
+        EXPECT_EQ(HksUkeyTimeoutTagByMsgCode(code), HKS_TAG_TIMEOUT);
     }
 
     /* ukey-native extension codes -> HKS_EXT_CRYPTO_TAG_TIMEOUT(200006) */
@@ -245,7 +245,7 @@ HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest004, TestSize.Level0)
 
 /**
  * @tc.name: HksUkeyCommonTest.HksUkeyCommonTest005
- * @tc.desc: tdd HKS_TAG_TIME_OUT is registered in HKS_VALID_TAGS — KEY_CLASS_EXTENSION +
+ * @tc.desc: tdd HKS_TAG_TIMEOUT is registered in HKS_VALID_TAGS — KEY_CLASS_EXTENSION +
  *           529 passes HksCheckParamSetValidity in the same paramSet and the ukey check
  *           succeeds (a prerequisite of HksCheckIsUkeyOperation; if unregistered the whole
  *           thing fails and falls back to the legacy path)
@@ -260,7 +260,7 @@ HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest005, TestSize.Level0)
     ASSERT_EQ(ret, HKS_SUCCESS);
     struct HksParam params[] = {
         { .tag = HKS_TAG_KEY_CLASS, .uint32Param = HKS_KEY_CLASS_EXTENSION },
-        { .tag = HKS_TAG_TIME_OUT, .uint32Param = 10 },
+        { .tag = HKS_TAG_TIMEOUT, .uint32Param = 10 },
     };
     ret = HksAddParams(paramSet, params, 2);
     ASSERT_EQ(ret, HKS_SUCCESS);
