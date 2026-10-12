@@ -190,7 +190,7 @@ struct HksParamSet *UnpackParamSetFromSrcData(uint32_t msgCode, const struct Hks
 
 // Server-side timeout readout (same rule as the client; tag seconds -> task milliseconds,
 // explicit x1000). The tag is selected per code layout (same source as the client's
-// HksUkeyParseTimeout): the 7 standard codes read HKS_TAG_TIME_OUT(529), extension codes read
+// HksUkeyParseTimeout): the 7 standard codes read HKS_TAG_TIMEOUT(529), extension codes read
 // HKS_EXT_CRYPTO_TAG_TIMEOUT(200006) — HksUkeyTimeoutTagByMsgCode is the single source of truth.
 constexpr uint32_t UKEY_ASYNC_MAX_TIMEOUT_SEC = 900; // 15-minute cap, consistent with the client
 constexpr uint32_t UKEY_ASYNC_DEFAULT_SEC = 60;      // Uniform default when no tag is set, consistent with the client

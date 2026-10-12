@@ -75,7 +75,7 @@ uint32_t GetEffectiveWaitTime(const CppParamSet &params, uint32_t defaultWaitTim
     if (extTimeout.first == HKS_SUCCESS) {
         timeoutSec = extTimeout.second;
     } else {
-        auto stdTimeout = params.GetParam<HKS_TAG_TIME_OUT>();
+        auto stdTimeout = params.GetParam<HKS_TAG_TIMEOUT>();
         HKS_IF_TRUE_LOGE_RETURN(stdTimeout.first != HKS_SUCCESS, defaultWaitTime,
             "no timeout tag, use operation default");
         timeoutSec = stdTimeout.second;

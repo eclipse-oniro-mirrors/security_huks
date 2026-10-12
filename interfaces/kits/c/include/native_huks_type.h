@@ -728,7 +728,7 @@ enum OH_Huks_Tag {
      * Asynchronous timeout duration in seconds, customizable by business logic
      * for ukey operations that reuse the standard HUKS interfaces.
      */
-    OH_HUKS_TAG_TIME_OUT = OH_HUKS_TAG_TYPE_UINT | 529,
+    OH_HUKS_TAG_TIMEOUT = OH_HUKS_TAG_TYPE_UINT | 529,
     OH_HUKS_TAG_KEY_ACCESS_GROUP = OH_HUKS_TAG_TYPE_BYTES | 523,
     /**
      * 601 to 1000 are reserved for other tags.

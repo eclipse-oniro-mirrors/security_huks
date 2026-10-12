@@ -47,7 +47,7 @@ int32_t HksCheckIsUkeyOperation(const struct HksParamSet *paramSet, int32_t *out
 }
 
 // Coverage set = 10 ukey-native extension codes + 7 reused standard codes; standard codes read
-// HKS_TAG_TIME_OUT(529), extension codes always read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006). Called
+// HKS_TAG_TIMEOUT(529), extension codes always read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006). Called
 // only for the ukey async coverage set; other message codes fall back to 200006 (defensive; the
 // caller has already done the ukey check).
 enum HksTag HksUkeyTimeoutTagByMsgCode(uint32_t msgCode)
@@ -60,7 +60,7 @@ enum HksTag HksUkeyTimeoutTagByMsgCode(uint32_t msgCode)
         case HKS_MSG_UPDATE:
         case HKS_MSG_FINISH:
         case HKS_MSG_ABORT:
-            return HKS_TAG_TIME_OUT;
+            return HKS_TAG_TIMEOUT;
         default:
             return HKS_EXT_CRYPTO_TAG_TIMEOUT;
     }
