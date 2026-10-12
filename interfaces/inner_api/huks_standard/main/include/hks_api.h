@@ -127,10 +127,13 @@ HKS_API_EXPORT int32_t HksUnregisterProvider(const struct HksBlob *name, const s
 /**
  * @brief Query ability information of a provider identified by resourceId
  * @param resourceId resource identifier
+ * @param paramSetIn optional parameter set;
+ * if HKS_TAG_SPECIFIC_USER_ID is present, across-accounts permission is required
  * @param abilityInfo ability information
  * @return error code, see hks_type.h
  */
-HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo);
+HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
+    struct HksAbilityInfo *abilityInfo);
 
 /**
  * @brief Export certificates of a provider

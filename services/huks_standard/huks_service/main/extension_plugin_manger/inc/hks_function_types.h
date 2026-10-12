@@ -93,7 +93,7 @@ using OnExportPublicKeyFunc = int32_t (*)(struct HksProcessWithErrorInfo &proces
 using OnImportWrappedKeyFunc = int32_t (*)(struct HksProcessWithErrorInfo &processAndError, const std::string &index,
     const std::string &wrappingKeyIndex, const CppParamSet &paramSet, const std::vector<uint8_t> &wrappedData);
 using OnQueryAbilityFunc = int32_t (*)(const struct HksProcessInfo &processInfo, std::string &resourceId,
-    CppAbilityInfo &abilityInfo);
+    const CppParamSet &paramSet, CppAbilityInfo &abilityInfo);
 using OnGetResourceIdFunc = int32_t (*)(const HksProcessInfo &processInfo, const std::string &providerName,
     const CppParamSet &paramSet, std::string &resourceId, struct HksExternalErrorInfo **errInfo);
 }

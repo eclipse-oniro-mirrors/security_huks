@@ -77,7 +77,8 @@ public:
         const std::string &wrappingKeyIndex, const CppParamSet &paramSet, const std::vector<uint8_t> &wrappedData);
     int32_t OnExportPublicKey(struct HksProcessWithErrorInfo &processAndError, const std::string &index,
         const CppParamSet &paramSet, std::vector<uint8_t> &outData);
-    int32_t OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId, CppAbilityInfo &abilityInfo);
+    int32_t OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId, const CppParamSet &paramSet,
+        CppAbilityInfo &abilityInfo);
     int32_t OnGetResourceId(const HksProcessInfo &processInfo, const std::string &providerName,
         const CppParamSet &paramSet, std::string &resourceId, struct HksExternalErrorInfo **errInfo);
 

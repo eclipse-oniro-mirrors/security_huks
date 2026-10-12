@@ -269,7 +269,8 @@ int32_t HksClientUnregisterProvider(const struct HksBlob *name, const struct Hks
     return ret;
 }
 
-int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo)
+int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
+    struct HksAbilityInfo *abilityInfo)
 {
     int32_t ret = 0;
     struct HksBlob inBlob = { 0, NULL };
@@ -285,12 +286,12 @@ int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityI
         ret = HksCheckBlob3(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "Invalid input data, check blobl3 fail, ret = %" LOG_PUBLIC "d", ret)
 
-        ret = HksAllocInBlobWithThreeBlobsAndUint32(&inBlob, resourceId, &abilityInfo->bundleName,
-            &abilityInfo->abilityName, (uint32_t)abilityInfo->abilityType);
+        ret = HksAllocInBlobWithThreeBlobsAndParamSet(&inBlob, resourceId, &abilityInfo->bundleName,
+            &abilityInfo->abilityName, paramSetIn);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "alloc inBlob fail")
 
-        ret = HksBlob3AndUint32Pack(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName,
-            (uint32_t)abilityInfo->abilityType, &inBlob);
+        ret = HksBlob3ParamSetPack(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName,
+            paramSetIn, &inBlob);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksQueryAbilityInfo pack fail")
 
         ret = HksSendRequest(HKS_MSG_EXT_QUERY_ABILITY_INFO, &inBlob, &outBlob, NULL);

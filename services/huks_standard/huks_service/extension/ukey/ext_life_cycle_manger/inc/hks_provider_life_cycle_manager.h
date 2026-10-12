@@ -79,7 +79,8 @@ public:
     int32_t GetAllProviderInfosByProviderName(const std::string &providerName, const int32_t &userid,
         std::vector<ProviderInfo> &providerInfos);
     int32_t GetExtensionProxy(const ProviderInfo &providerInfo, sptr<IHuksAccessExtBase> &proxy);
-    int32_t OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId, CppAbilityInfo &abilityInfo);
+    int32_t OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId, const CppParamSet &paramSet,
+        CppAbilityInfo &abilityInfo);
 private:
     void PrintRegisterProviders();
     int32_t HapGetAllConnectInfoByProviderName(const std::string &bundleName, const std::string &providerName,

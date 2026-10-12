@@ -147,7 +147,7 @@ HWTEST_F(HksUKeyTest, HksRegisterProviderTest001, TestSize.Level0)
     tmp.bundleName.data = (uint8_t*)HksMalloc(128);
     tmp.bundleName.size = 128;
     HksBlob resourceBlob = StringToHuksBlob(resourceId.data());
-    int32_t ret = HksQueryAbilityInfo(&resourceBlob, &tmp);
+    int32_t ret = HksQueryAbilityInfo(&resourceBlob, NULL, &tmp);
     HKS_FREE_BLOB(tmp.abilityName);
     HKS_FREE_BLOB(tmp.bundleName);
     EXPECT_NE(ret, HKS_SUCCESS);

@@ -287,7 +287,8 @@ HKS_API_EXPORT int32_t HksUnregisterProvider(const struct HksBlob *name, const s
 #endif
 }
 
-HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, struct HksAbilityInfo *abilityInfo)
+HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
+    struct HksAbilityInfo *abilityInfo)
 {
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter HksQueryAbilityInfo");
@@ -295,11 +296,12 @@ HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, struct Hk
         return HKS_ERROR_NULL_POINTER;
     }
 
-    int32_t ret = HksClientQueryAbilityInfo(resourceId, abilityInfo);
+    int32_t ret = HksClientQueryAbilityInfo(resourceId, paramSetIn, abilityInfo);
     HKS_IF_NOT_SUCC_LOGE(ret, "leave QueryAbilityInfo, result = %" LOG_PUBLIC "d", ret);
     return ret;
 #else
     (void)resourceId;
+    (void)paramSetIn;
     (void)abilityInfo;
     return HKS_ERROR_API_NOT_SUPPORTED;
 #endif

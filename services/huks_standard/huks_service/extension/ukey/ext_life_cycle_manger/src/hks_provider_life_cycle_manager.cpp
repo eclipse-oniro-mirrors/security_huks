@@ -126,13 +126,13 @@ int32_t HksProviderLifeCycleManager::OnRegisterProvider(const HksProcessInfo &pr
     return ret;
 }
 
-int32_t HksProviderLifeCycleManager::OnQueryAbility(const HksProcessInfo &processInfo,
-    std::string &resourceId, CppAbilityInfo &abilityInfo)
+int32_t HksProviderLifeCycleManager::OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId,
+    const CppParamSet &paramSet, CppAbilityInfo &abilityInfo)
 {
     ProviderInfo providerInfo{};
     std::string index{};
     GetProviderInfoAndIndex(resourceId, providerInfo, index);
-    providerInfo.m_userid = processInfo.userIdInt;
+    providerInfo.m_userid = GetEffectiveUserId(paramSet, processInfo.uidInt);
     ProviderIndexKey indexKey(providerInfo, index);
 
     std::lock_guard<std::mutex> indexLock(m_providerIndexMutex);

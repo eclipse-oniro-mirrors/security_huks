@@ -151,7 +151,7 @@ HWTEST_F(HksUkeyExtensionCryptoTest, HksQueryAbilityInfoTest001, TestSize.Level0
     abilityInfo.bundleName.data = (uint8_t*)HksMalloc(128);
     abilityInfo.bundleName.size = 128;
 
-    ret = HksQueryAbilityInfo(&resourceBlob, &abilityInfo);
+    ret = HksQueryAbilityInfo(&resourceBlob, NULL, &abilityInfo);
     if (ret != HKS_SUCCESS) {
         HKS_TEST_LOG_I("HksQueryAbilityInfoTest001, ret = %d", ret);
     }

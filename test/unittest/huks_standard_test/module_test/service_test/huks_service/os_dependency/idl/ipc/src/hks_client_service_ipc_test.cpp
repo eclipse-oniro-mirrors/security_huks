@@ -100,7 +100,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest004, TestSize.Level0)
     struct HksAbilityInfo abilityInfo;
     abilityInfo.bundleName = MakeBlob(bundle);
     abilityInfo.abilityName = MakeBlob(ability);
-    int32_t ret = HksClientQueryAbilityInfo(nullptr, &abilityInfo);
+    int32_t ret = HksClientQueryAbilityInfo(nullptr, nullptr, &abilityInfo);
     EXPECT_NE(ret, HKS_SUCCESS);
 }
 
@@ -119,7 +119,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest005, TestSize.Level0)
     struct HksAbilityInfo abilityInfo;
     abilityInfo.bundleName = MakeBlob(bundle);
     abilityInfo.abilityName = MakeBlob(ability);
-    int32_t ret = HksClientQueryAbilityInfo(&resourceId, &abilityInfo);
+    int32_t ret = HksClientQueryAbilityInfo(&resourceId, nullptr, &abilityInfo);
     EXPECT_NE(ret, HKS_SUCCESS);
 }
 
