@@ -33,6 +33,7 @@
 #include "hks_service_ipc_serialization.h" // HksParamSetToParams (embedded paramSet parsing)
 #include "hks_task_executor.h"
 #include "hks_plugin_loader.h"
+#include "hks_permission_check.h"          // CheckUkeyAuthPinType, CheckUkeyCertCaller, HksCheckAcrossAccountsPermission
 #include "securec.h"
 
 // The whole server-side submit module serves the ukey async path only (its helper functions
@@ -283,6 +284,56 @@ static void HandleSubmitAccept(const sptr<IRemoteObject> &clientStub, uint32_t m
     HKS_LOG_E("Submit ukey task rejected, accept=%{public}d", static_cast<int>(accept));
 }
 
+// Permission pre-check: runs on the IPC thread before the SO/executor availability check so
+static bool HksUkeyAsyncPreCheckPermission(uint32_t code, const struct HksParamSet *paramSet,
+    const uint8_t *context, const sptr<IRemoteObject> &clientStub)
+{
+    struct HksProcessInfo processInfo = HKS_PROCESS_INFO_INIT_VALUE;
+    int32_t ret = HksGetProcessInfoForIPC(paramSet, context, &processInfo);
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("ukey pre-check get process info fail, code=%u ret=%d", code, ret);
+        RejectUkeyAsync(clientStub, code, ret);
+        return false;
+    }
+
+    if (paramSet != nullptr) {
+        ret = HksCheckAcrossAccountsPermission(paramSet, processInfo.userIdInt);
+        if (ret != HKS_SUCCESS) {
+            HKS_LOG_E("ukey pre-check across-accounts fail, code=%u ret=%d", code, ret);
+            HKS_FREE_BLOB(processInfo.processName);
+            HKS_FREE_BLOB(processInfo.userId);
+            RejectUkeyAsync(clientStub, code, ret);
+            return false;
+        }
+    }
+
+    switch (code) {
+        case HKS_MSG_EXT_AUTH_UKEY_PIN:
+            ret = CheckUkeyAuthPinType();
+            break;
+        case HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES:
+        case HKS_MSG_EXT_EXPORT_CERTIFICATE:
+        case HKS_MSG_EXT_IMPORT_CERTIFICATE:
+            ret = CheckUkeyCertCaller(&processInfo);
+            break;
+        default:
+            ret = HKS_SUCCESS;
+            break;
+    }
+
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("ukey pre-check permission fail, code=%u ret=%d", code, ret);
+        HKS_FREE_BLOB(processInfo.processName);
+        HKS_FREE_BLOB(processInfo.userId);
+        RejectUkeyAsync(clientStub, code, ret);
+        return false;
+    }
+
+    HKS_FREE_BLOB(processInfo.processName);
+    HKS_FREE_BLOB(processInfo.userId);
+    return true;
+}
+
 int32_t HksSubmitUkeyAsyncTask(const HksUkeySubmitParams &request, const uint8_t *context)
 {
     // Thread-pool submission goes through the loader's lock-protected channel (Get+Submit inside
@@ -396,6 +447,10 @@ bool HksTrySubmitUkeyAsyncMsg(uint32_t code, MessageParcel &data, uint32_t outSi
         }
         // Request claimed: the error is replied via the callback; do not fall back to
         // the legacy path.
+        return true;
+    }
+    if (!HksUkeyAsyncPreCheckPermission(code, paramSet, context, clientStub)) {
+        HksFreeParamSet(&paramSet);
         return true;
     }
     HksUkeySubmitParams request;
