@@ -80,7 +80,8 @@ struct HksParamSet *ParseThreeStageInnerParamSet(enum HksIpcInterfaceCode code, 
 {
     struct HksParamSet *wrapper = nullptr;
     if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
-        HKS_LOG_E("ukey unpack three-stage wrapper fail, msgCode=%u size=%u", msgCode, remain);
+        HKS_LOG_E("ukey unpack three-stage wrapper fail, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
+            msgCode, remain);
         return nullptr;
     }
     struct HksParamOut params[] = {
@@ -105,7 +106,7 @@ struct HksParamSet *ParseThreeStageInnerParamSet(enum HksIpcInterfaceCode code, 
         (void)HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(real->data), real->size, &inner);
     } while (false);
     HksFreeParamSet(&wrapper);
-    HKS_LOG_I("ukey unpack three-stage inner %s, msgCode=%u",
+    HKS_LOG_I("ukey unpack three-stage inner %" LOG_PUBLIC "s, msgCode=%" LOG_PUBLIC "u",
         (inner == nullptr) ? "fail" : "ok", msgCode);
     return inner;
 }
@@ -125,34 +126,46 @@ struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msg
     uint32_t skipBlobs = (code == HKS_MSG_IMPORT_WRAPPED_KEY) ? 2 : 1;
     switch (code) {
         case HKS_MSG_EXT_CLEAR_PIN_AUTH_STATE:
-            return nullptr; // No paramSet (the client packs only the index blob)
+            // [index blob][paramSet] — BuildParamSetNotNull always creates a paramSet.
+            skipBlobs = 1;
+            break;
         case HKS_MSG_EXT_QUERY_ABILITY_INFO:
-            return nullptr; // No paramSet (the client packs only 3 blobs: resourceId/bundleName/abilityName)
+            // [blob1][blob2][blob3][paramSet?] — paramSet absent when paramSetIn is NULL
+            // (HksBlob3ParamSetPack omits it); the tail check below returns nullptr in that case.
+            skipBlobs = 3;
+            break;
         case HKS_MSG_EXPORT_PUBLIC_KEY: // [keyAlias][keyOutSize(u32)][paramSet]
             if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset)) {
-                HKS_LOG_E("ukey unpack export_pub_key skip fail, msgCode=%u offset=%u", msgCode, offset);
+                HKS_LOG_E("ukey unpack export_pub_key skip fail,
+                    msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u", msgCode, offset);
                 return nullptr;
             }
+            skipBlobs = 0; // custom skip already advanced offset
             break;
         case HKS_MSG_EXT_IMPORT_CERTIFICATE: // [resourceId][purpose(i32)][index][cert][paramSet]
             if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset) ||
                 !SkipBlobInRaw(p, remain, offset) || !SkipBlobInRaw(p, remain, offset)) {
-                HKS_LOG_E("ukey unpack import_cert skip fail, msgCode=%u offset=%u", msgCode, offset);
+                HKS_LOG_E("ukey unpack import_cert skip fail,
+                    msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u", msgCode, offset);
                 return nullptr;
             }
+            skipBlobs = 0; // custom skip already advanced offset
             break;
         default:
-            // Extension codes/GEN_KEY/IMPORT_WRAPPED_KEY: blob first (IMPORT_WRAPPED_KEY has 2)
-            for (uint32_t i = 0; i < skipBlobs; ++i) {
-                if (!SkipBlobInRaw(p, remain, offset)) {
-                    HKS_LOG_E("ukey unpack skip blob fail, msgCode=%u offset=%u", msgCode, offset);
-                    return nullptr;
-                }
-            }
-            break;
+            break; // skipBlobs already set above
+    }
+    // Generic blob skipping for codes that use the skipBlobs count (codes with custom skip
+    // logic set skipBlobs = 0 to skip this loop).
+    for (uint32_t i = 0; i < skipBlobs; ++i) {
+        if (!SkipBlobInRaw(p, remain, offset)) {
+            HKS_LOG_E("ukey unpack skip blob fail,
+                msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u", msgCode, offset);
+            return nullptr;
+        }
     }
     if (remain - offset < sizeof(struct HksParamSet)) {
-        HKS_LOG_E("ukey unpack paramSet too short, msgCode=%u offset=%u remain=%u", msgCode, offset, remain);
+        HKS_LOG_E("ukey unpack paramSet too short,
+            msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u remain=%u", msgCode, offset, remain);
         return nullptr;
     }
     // The paramSet has no length prefix and is written raw with 4-byte padding. HksCheckParamSet
@@ -166,7 +179,7 @@ struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msg
     }
     struct HksParamSet *paramSet = nullptr;
     (void)HksGetParamSet(header, header->paramSetSize, &paramSet);
-    HKS_LOG_I("ukey unpack paramSet %s, msgCode=%u offset=%u paramSetSize=%u",
+    HKS_LOG_I("ukey unpack paramSet %s, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u paramSetSize=%u",
         (paramSet == nullptr) ? "fail" : "ok", msgCode, offset, header->paramSetSize);
     return paramSet;
 }
@@ -178,11 +191,11 @@ struct HksParamSet *UnpackParamSetFromSrcData(uint32_t msgCode, const struct Hks
     const uint8_t *p = srcData.data;
     uint32_t remain = srcData.size;
     if (p == nullptr || remain < sizeof(uint32_t)) {
-        HKS_LOG_E("ukey unpack srcData invalid, msgCode=%u size=%u", msgCode, remain);
+        HKS_LOG_E("ukey unpack srcData invalid, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u", msgCode, remain);
         return nullptr;
     }
     enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
-    HKS_LOG_I("ukey unpack srcData begin, msgCode=%u size=%u", msgCode, remain);
+    HKS_LOG_I("ukey unpack srcData begin, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u", msgCode, remain);
     if (code == HKS_MSG_INIT || code == HKS_MSG_UPDATE || code == HKS_MSG_FINISH || code == HKS_MSG_ABORT) {
         return ParseThreeStageInnerParamSet(code, msgCode, p, remain);
     }
@@ -206,9 +219,10 @@ int32_t ParseTimeoutMs(uint32_t msgCode, const struct HksParamSet *paramSet, uin
         HKS_IF_TRUE_LOGE_RETURN(GetTagType((enum HksTag)timeoutParam->tag) != HKS_TAG_TYPE_UINT,
             HKS_ERROR_INVALID_ARGUMENT, "timeout tag type invalid");
         uint32_t val = timeoutParam->uint32Param;
-        HKS_IF_TRUE_LOGE_RETURN(val > UKEY_ASYNC_MAX_TIMEOUT_SEC, HKS_ERROR_INVALID_ARGUMENT,
-            "timeout %" LOG_PUBLIC "u exceeds server limit", val);
-        timeoutSec = (val == 0) ? timeoutSec : val;
+        HKS_IF_TRUE_LOGE_RETURN(val == 0 || val > UKEY_ASYNC_MAX_TIMEOUT_SEC, HKS_ERROR_INVALID_ARGUMENT,
+            "timeout %" LOG_PUBLIC "u not supported, must be in [1, %" LOG_PUBLIC "u]",
+            val, UKEY_ASYNC_MAX_TIMEOUT_SEC);
+        timeoutSec = val;
     }
     *timeoutMs = timeoutSec * UKEY_ASYNC_MS_PER_SEC;
     return HKS_SUCCESS;
@@ -237,12 +251,14 @@ bool HksIsUkeyStandardMsgCode(uint32_t code, const struct HksBlob &srcData)
     // not a raw paramSet).
     struct HksParamSet *paramSet = UnpackParamSetFromSrcData(code, srcData);
     if (paramSet == nullptr) {
-        HKS_LOG_E("ukey standard msg unpack fail, msgCode=%u size=%u -> not ukey", code, srcData.size);
+        HKS_LOG_E("ukey standard msg unpack fail, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u -> not ukey",
+            code, srcData.size);
         return false; // Parse failure is treated as non-ukey (falls back to the legacy path with the original error)
     }
     int32_t ukeyRet = 0;
     bool isUkey = (HksCheckIsUkeyOperation(paramSet, &ukeyRet) == HKS_SUCCESS);
-    HKS_LOG_I("ukey standard msg code=%u isUkey=%d ukeyRet=%d", code, isUkey ? 1 : 0, ukeyRet);
+    HKS_LOG_I("ukey standard msg code=%" LOG_PUBLIC "u isUkey=%" LOG_PUBLIC "d ukeyRet=%" LOG_PUBLIC "d",
+        code, isUkey ? 1 : 0, ukeyRet);
     HksFreeParamSet(&paramSet);
     return isUkey;
 }
@@ -254,7 +270,7 @@ bool HksIsUkeyStandardMsgCode(uint32_t code, const struct HksBlob &srcData)
 static int32_t RejectUkeyAsync(const sptr<IRemoteObject> &clientStub, uint32_t msgCode, int32_t err)
 {
     auto extProxy = OHOS::iface_cast<OHOS::Security::Hks::IHksExtService>(clientStub);
-    HKS_LOG_I("ukey submit reject, msgCode=%u err=%d proxy=%s",
+    HKS_LOG_I("ukey submit reject, msgCode=%" LOG_PUBLIC "u err=%" LOG_PUBLIC "d proxy=%" LOG_PUBLIC "s",
         msgCode, err, (extProxy == nullptr) ? "null" : "ok");
     if (extProxy != nullptr) {
         std::unique_ptr<uint8_t[]> emptyData(nullptr); // empty output (size=0)
@@ -291,7 +307,7 @@ static bool HksUkeyAsyncPreCheckPermission(uint32_t code, const struct HksParamS
     struct HksProcessInfo processInfo = HKS_PROCESS_INFO_INIT_VALUE;
     int32_t ret = HksGetProcessInfoForIPC(paramSet, context, &processInfo);
     if (ret != HKS_SUCCESS) {
-        HKS_LOG_E("ukey pre-check get process info fail, code=%u ret=%d", code, ret);
+        HKS_LOG_E("ukey pre-check get process info fail, code=%" LOG_PUBLIC "u ret=%" LOG_PUBLIC "d", code, ret);
         RejectUkeyAsync(clientStub, code, ret);
         return false;
     }
@@ -299,7 +315,7 @@ static bool HksUkeyAsyncPreCheckPermission(uint32_t code, const struct HksParamS
     if (paramSet != nullptr) {
         ret = HksCheckAcrossAccountsPermission(paramSet, processInfo.userIdInt);
         if (ret != HKS_SUCCESS) {
-            HKS_LOG_E("ukey pre-check across-accounts fail, code=%u ret=%d", code, ret);
+            HKS_LOG_E("ukey pre-check across-accounts fail, code=%" LOG_PUBLIC "u ret=%" LOG_PUBLIC "d", code, ret);
             HKS_FREE_BLOB(processInfo.processName);
             HKS_FREE_BLOB(processInfo.userId);
             RejectUkeyAsync(clientStub, code, ret);
@@ -322,7 +338,7 @@ static bool HksUkeyAsyncPreCheckPermission(uint32_t code, const struct HksParamS
     }
 
     if (ret != HKS_SUCCESS) {
-        HKS_LOG_E("ukey pre-check permission fail, code=%u ret=%d", code, ret);
+        HKS_LOG_E("ukey pre-check permission fail, code=%" LOG_PUBLIC "u ret=%" LOG_PUBLIC "d", code, ret);
         HKS_FREE_BLOB(processInfo.processName);
         HKS_FREE_BLOB(processInfo.userId);
         RejectUkeyAsync(clientStub, code, ret);
@@ -364,7 +380,8 @@ int32_t HksSubmitUkeyAsyncTask(const HksUkeySubmitParams &request, const uint8_t
         return RejectUkeyAsync(request.clientStub, request.msgCode, ret);
     }
     uint64_t fullTokenId = IPCSkeleton::GetCallingFullTokenID();
-    HKS_IF_TRUE_LOGE(fullTokenId == 0, "ukey submit calling full tokenId is zero, msgCode=%u", request.msgCode)
+    HKS_IF_TRUE_LOGE(fullTokenId == 0, "ukey submit calling full tokenId is zero,
+        msgCode=%" LOG_PUBLIC "u", request.msgCode)
 
     // Inject the dispatch target via table lookup (single source of truth): extension codes +
     // reused standard single-arg codes -> MESSAGE_HANDLER table; three-stage codes -> THREE_STAGE
@@ -424,22 +441,44 @@ bool HksTrySubmitUkeyAsyncMsg(uint32_t code, MessageParcel &data, uint32_t outSi
     // caller has already done the message-code/KEY_CLASS decision) and must be invoked before the
     // legacy INIT block (otherwise the callback object would be consumed by the death-notification
     // logic).
+    //
+    // INIT special case: a sync INIT client writes a death-notification callback (HksStub) at the
+    // same parcel position as the ukey async callback (HksExtStub). Reading it via
+    // ReadRemoteObject() would consume the death-notification callback and misjudge it as an async
+    // callback. To disambiguate, check the timeout tag before reading the callback: no tag → sync
+    // client → return false without consuming the callback (the legacy INIT block reads it later).
+    if (code == HKS_MSG_INIT) {
+        struct HksParamSet *initParamSet = UnpackParamSetFromSrcData(code, srcData);
+        bool hasTimeout = false;
+        if (initParamSet != nullptr) {
+            struct HksParam *timeoutParam = nullptr;
+            hasTimeout = (HksGetParam(initParamSet, HksUkeyTimeoutTagByMsgCode(code), &timeoutParam)
+                == HKS_SUCCESS);
+        }
+        HksFreeParamSet(&initParamSet);
+        if (!hasTimeout) {
+            HKS_LOG_I("ukey init sync path (no timeout tag), code=%" LOG_PUBLIC "u", code);
+            return false; // sync INIT -> legacy path (callback not consumed)
+        }
+    }
+
     sptr<IRemoteObject> clientStub = data.ReadRemoteObject();
     if (clientStub == nullptr) {
-        HKS_LOG_I("ukey try submit legacy path, code=%u (no callback object)", code);
+        HKS_LOG_I("ukey try submit legacy path, code=%" LOG_PUBLIC "u (no callback object)", code);
         // Legacy client: no callback object written -> legacy sync path (the parcel
         // position is unconsumed; later logic reads no remote object).
         return false;
     }
-    HKS_LOG_I("ukey try submit async path, code=%u", code);
+    HKS_LOG_I("ukey try submit async path, code=%" LOG_PUBLIC "u", code);
 
     // Extract the embedded paramSet from the client-packed buffer (unpacked per code layout);
-    // operations without a paramSet (CLEAR_PIN_AUTH_STATE/QUERY_ABILITY_INFO etc.) may leave
-    // paramSet == NULL (timeout uses the default; identity goes through the thread context).
+    // QUERY_ABILITY_INFO may leave paramSet == NULL when paramSetIn is NULL (no paramSet packed);
+    // CLEAR_PIN_AUTH_STATE may also return NULL on parse failure. Both use default timeout and
+    // identity through the thread context.
     struct HksParamSet *paramSet = UnpackParamSetFromSrcData(code, srcData);
     if (paramSet == nullptr && code != HKS_MSG_EXT_CLEAR_PIN_AUTH_STATE &&
         code != HKS_MSG_EXT_QUERY_ABILITY_INFO) {
-        HKS_LOG_E("ukey try submit unpack paramSet null, code=%u -> reject", code);
+        HKS_LOG_E("ukey try submit unpack paramSet null, code=%" LOG_PUBLIC "u -> reject", code);
         auto extProxy = OHOS::iface_cast<OHOS::Security::Hks::IHksExtService>(clientStub);
         if (extProxy != nullptr) {
             std::unique_ptr<uint8_t[]> emptyData(nullptr);
@@ -460,7 +499,7 @@ bool HksTrySubmitUkeyAsyncMsg(uint32_t code, MessageParcel &data, uint32_t outSi
     request.outSize = outSize;
     request.clientStub = clientStub;
     HksSubmitUkeyAsyncTask(request, context);
-    HKS_LOG_I("ukey try submit done, code=%u (async accepted, reply via callback)", code);
+    HKS_LOG_I("ukey try submit done, code=%" LOG_PUBLIC "u (async accepted, reply via callback)", code);
     HksFreeParamSet(&paramSet);
     return true; // admitted (the async path is complete; the caller returns the admission receipt directly)
 }

@@ -294,7 +294,7 @@ int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, const struct HksPa
             paramSetIn, &inBlob);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksQueryAbilityInfo pack fail")
 
-        ret = HksSendRequest(HKS_MSG_EXT_QUERY_ABILITY_INFO, &inBlob, &outBlob, NULL);
+        ret = HksSendRequest(HKS_MSG_EXT_QUERY_ABILITY_INFO, &inBlob, &outBlob, paramSetIn);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksSendRequest fail, ret = %" LOG_PUBLIC "d", ret)
 
         (void)memset_s(resourceId->data, resourceId->size, 0, resourceId->size);
