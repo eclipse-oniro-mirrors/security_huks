@@ -80,10 +80,9 @@ int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInter
     return HKS_SUCCESS;
 }
 
-// ukey async decision: the timeout tag is the mode switch — present -> async, absent -> sync
-// (backward compatible with legacy clients). After the gate, extension-only-code whitelist +
-// reused standard codes checked via HksCheckIsUkeyOperation (KEY_CLASS == EXTENSION).
-bool HksIsUkeyAsyncMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
+// ukey operation identification (regardless of async/sync mode): ext codes are always ukey;
+// standard codes are ukey only when KEY_CLASS == EXTENSION (requires non-null paramSet).
+bool HksIsUkeyOperationMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
 {
     // Backward compatibility gate: no paramSet or no timeout tag -> sync (legacy behavior).
     if (paramSet == nullptr) {
@@ -120,11 +119,27 @@ bool HksIsUkeyAsyncMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSe
         msgCode == HKS_MSG_UPDATE || msgCode == HKS_MSG_FINISH || msgCode == HKS_MSG_ABORT) {
         int32_t outRet = 0;
         bool isUkey = (HksCheckIsUkeyOperation(paramSet, &outRet) == HKS_SUCCESS);
-        HKS_LOG_I("ukey client async check, code=%" LOG_PUBLIC "u isUkey=%" LOG_PUBLIC "d outRet=%" LOG_PUBLIC "d",
+        HKS_LOG_I("ukey client check, code=%" LOG_PUBLIC "u isUkey=%" LOG_PUBLIC "d outRet=%" LOG_PUBLIC "d",
             static_cast<uint32_t>(msgCode), isUkey ? 1 : 0, outRet);
         return isUkey;
     }
     return false;
+}
+
+// ukey async decision: the timeout tag is the mode switch — present -> async, absent -> sync
+// (backward compatible with legacy clients). Caller must have already confirmed the message is
+// a ukey operation via HksIsUkeyOperationMsg; this function only checks the timeout tag.
+bool HksIsUkeyAsyncMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
+{
+    if (paramSet == nullptr) {
+        return false;
+    }
+    struct HksParam *timeoutParam = nullptr;
+    enum HksTag timeoutTag = HksUkeyTimeoutTagByMsgCode(static_cast<uint32_t>(msgCode));
+    if (HksGetParam(paramSet, timeoutTag, &timeoutParam) != HKS_SUCCESS) {
+        return false; // no timeout tag -> sync
+    }
+    return true;
 }
 #endif // HKS_UKEY_EXTENSION_CRYPTO
 } // namespace
@@ -416,8 +431,13 @@ int32_t HksSendRequest(enum HksIpcInterfaceCode type, const struct HksBlob *inBl
     // ukey async takes priority: must come before the INIT death-notification block (double-write
     // guard — ukey INIT returns early and never falls into the g_hks_callback write).
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
-    if (HksIsUkeyAsyncMsg(type, paramSet)) {
+    bool isUkeyOp = HksIsUkeyOperationMsg(type, paramSet);
+    if (isUkeyOp && HksIsUkeyAsyncMsg(type, paramSet)) {
+        HKS_LOG_I("ukey operation mode: ASYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
         return HksUkeySendAsync(type, data, paramSet, proxy, outBlob);
+    }
+    if (isUkeyOp) {
+        HKS_LOG_I("ukey operation mode: SYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
     }
 #endif
 
