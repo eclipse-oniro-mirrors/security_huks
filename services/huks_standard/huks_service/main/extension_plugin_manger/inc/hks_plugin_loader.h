@@ -59,9 +59,15 @@ public:
     OHOS::Security::Hks::HksTaskExecutor *GetTaskExecutor();
     int32_t StartTaskExecutor();
     int32_t StopTaskExecutor();
-    // locked submission (Get+Submit inside the libMutex critical section; returns an
-    // HksTaskAccept enum value, -1 when the executor is unavailable)
-    int32_t SubmitTaskExecutor(std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task);
+    // Per-provider executor: routes the task to the executor for the given providerName,
+    // creating it on first use. An empty providerName falls back to the SO-internal global
+    // executor (preserves the original behavior when providerName extraction fails).
+    // Returns an HksTaskAccept enum value, -1 when the executor is unavailable.
+    int32_t SubmitTaskExecutor(const std::string &providerName,
+        std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task);
+    // Stops and removes the per-provider executor for the given providerName (called on
+    // provider unregister; blocks until in-flight tasks finish, same as the global Stop).
+    int32_t StopExecutorForProvider(const std::string &providerName);
     static std::shared_ptr<HuksPluginLoader> GetInstanceWrapper();
     static void ReleaseInstance();
 
@@ -72,6 +78,13 @@ private:
     void* m_pluginHandle = nullptr;
     std::mutex libMutex;
     std::string GetMethodByEnum(PluginMethodEnum methodEnum);
+    // Per-provider thread pools: each provider gets its own HksTaskExecutor (1 worker +
+    // 16 pending), isolating slow operations from other providers. Created on first Submit,
+    // destroyed on StopExecutorForProvider. Protected by executorMutex_ (separate from
+    // libMutex to avoid deadlock: Stop+join must not hold libMutex).
+    std::mutex executorMutex_;
+    std::unordered_map<std::string, std::unique_ptr<OHOS::Security::Hks::HksTaskExecutor>> executors_;
+    OHOS::Security::Hks::HksTaskExecutor *GetOrCreateExecutor(const std::string &providerName);
 };
 }
 }

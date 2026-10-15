@@ -160,17 +160,64 @@ OHOS::Security::Hks::HksTaskExecutor *HuksPluginLoader::GetTaskExecutor()
 }
 
 
-int32_t HuksPluginLoader::SubmitTaskExecutor(std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task)
+int32_t HuksPluginLoader::SubmitTaskExecutor(const std::string &providerName,
+    std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task)
 {
-    // Get+Submit inside the libMutex critical section: mutually exclusive with DlcloseInternal
-    // (same lock), closing the UAF window where "the executor pointer is obtained and then the
-    // SO is dlclosed". The submission critical section is very short (enqueue + notify,
-    // microseconds), so it poses no deadlock risk with register/unload.
-    std::lock_guard<std::mutex> lock(libMutex);
-    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, -1) // SO not loaded: executor does not exist
-    auto *executor = GetTaskExecutor();
+    // Empty providerName (extraction failed or legacy code path) falls back to the SO-internal
+    // global executor via dlsym — preserves the original behavior when providerName is unavailable.
+    if (providerName.empty()) {
+        std::lock_guard<std::mutex> lock(libMutex);
+        HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, -1)
+        auto *executor = GetTaskExecutor();
+        HKS_IF_TRUE_RETURN(executor == nullptr, -1)
+        return static_cast<int32_t>(executor->Submit(std::move(task)));
+    }
+    // Per-provider executor: created on first use (1 worker + 16 pending), isolating slow
+    // operations from other providers. executorMutex_ (not libMutex) protects the map;
+    // GetOrCreateExecutor does Start() under executorMutex_, and StopExecutorForProvider
+    // does Stop()+join under executorMutex_ — neither holds libMutex during join, avoiding
+    // deadlock with the AutoRefCount dispatch path.
+    auto *executor = GetOrCreateExecutor(providerName);
     HKS_IF_TRUE_RETURN(executor == nullptr, -1)
     return static_cast<int32_t>(executor->Submit(std::move(task)));
+}
+
+OHOS::Security::Hks::HksTaskExecutor *HuksPluginLoader::GetOrCreateExecutor(const std::string &providerName)
+{
+    std::lock_guard<std::mutex> lock(executorMutex_);
+    auto it = executors_.find(providerName);
+    if (it != executors_.end()) {
+        return it->second.get();
+    }
+    auto executor = std::make_unique<OHOS::Security::Hks::HksTaskExecutor>(
+        OHOS::Security::Hks::HksTaskExecutor::Config{});
+    executor->Start();
+    auto *ptr = executor.get();
+    executors_[providerName] = std::move(executor);
+    HKS_LOG_I("per-provider executor created, provider=%{public}s", providerName.c_str());
+    return ptr;
+}
+
+int32_t HuksPluginLoader::StopExecutorForProvider(const std::string &providerName)
+{
+    // Stop+join outside libMutex: Stop() blocks until in-flight tasks finish (<=60s);
+    // holding libMutex during join would deadlock with AutoRefCount (worker dispatch path
+    // needs libMutex). executorMutex_ is separate and safe to hold during join.
+    std::unique_ptr<OHOS::Security::Hks::HksTaskExecutor> executorToStop;
+    {
+        std::lock_guard<std::mutex> lock(executorMutex_);
+        auto it = executors_.find(providerName);
+        if (it == executors_.end()) {
+            return HKS_SUCCESS; // not found: already stopped or never created
+        }
+        executorToStop = std::move(it->second);
+        executors_.erase(it);
+    }
+    HKS_LOG_I("per-provider executor stopping, provider=%{public}s", providerName.c_str());
+    executorToStop->Stop(); // join in-flight tasks (<=60s) + drain queued
+    executorToStop.reset();
+    HKS_LOG_I("per-provider executor stopped, provider=%{public}s", providerName.c_str());
+    return HKS_SUCCESS;
 }
 
 int32_t HuksPluginLoader::StartTaskExecutor()

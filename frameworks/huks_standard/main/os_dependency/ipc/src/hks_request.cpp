@@ -119,8 +119,10 @@ bool HksIsUkeyOperationMsg(enum HksIpcInterfaceCode msgCode, const struct HksPar
         msgCode == HKS_MSG_UPDATE || msgCode == HKS_MSG_FINISH || msgCode == HKS_MSG_ABORT) {
         int32_t outRet = 0;
         bool isUkey = (HksCheckIsUkeyOperation(paramSet, &outRet) == HKS_SUCCESS);
-        HKS_LOG_I("ukey client check, code=%" LOG_PUBLIC "u isUkey=%" LOG_PUBLIC "d outRet=%" LOG_PUBLIC "d",
-            static_cast<uint32_t>(msgCode), isUkey ? 1 : 0, outRet);
+        if (isUkey) {
+            HKS_LOG_I("ukey client check, code=%" LOG_PUBLIC "u outRet=%" LOG_PUBLIC "d",
+                static_cast<uint32_t>(msgCode), outRet);
+        }
         return isUkey;
     }
     return false;
@@ -171,8 +173,7 @@ static int32_t HksUkeySendAsync(enum HksIpcInterfaceCode msgCode, MessageParcel 
     // reply round-trip still needs time; see HKS_UKEY_ASYNC_WAIT_MARGIN.
     auto [errCode, receivedData, receivedSize, receivedCode, errInfo] =
         hksCallback->WaitForAsyncReply(timeout + HKS_UKEY_ASYNC_WAIT_MARGIN);
-    HKS_LOG_I("ukey client async wait returned,
-        code=%" LOG_PUBLIC "u errCode=%" LOG_PUBLIC "u receivedCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
+    HKS_LOG_I("ukey client async wait returned, code=%" LOG_PUBLIC "u errCode=%" LOG_PUBLIC "u receivedCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
         static_cast<uint32_t>(msgCode), errCode, receivedCode, receivedSize);
     // (2) Faithful error code: errCode is passed through (BUSY/timeout/execution failure are
     // distinguishable); the error path also passes through errInfo.

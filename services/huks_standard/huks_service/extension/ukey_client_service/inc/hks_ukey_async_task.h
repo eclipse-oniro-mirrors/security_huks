@@ -80,6 +80,10 @@ struct HksUkeyTaskParams {
     uint64_t fullTokenId = 0;
     // Client callback object (refcounted).
     OHOS::sptr<OHOS::IRemoteObject> clientStub;
+    // providerName for per-provider executor routing (empty = global fallback).
+    std::string routingKey;
+    // For FINISH/ABORT: the handle extracted at submit time (for routing table cleanup in OnDone).
+    uint64_t handleAtSubmit = 0;
 };
 
 /*
@@ -159,6 +163,11 @@ private:
     // Thread-local extended error (captured at the end of Run, carried out with the
     // reply in OnDone; freed after SendAsyncReply).
     struct HksExternalErrorInfo *extErrInfo_ = nullptr;
+    // providerName for per-provider executor routing (empty = global fallback).
+    std::string routingKey_;
+    // For FINISH/ABORT: the handle extracted at submit time (used to clean up the
+    // handle→providerName routing entry in OnDone). 0 for non-three-stage / INIT.
+    uint64_t handleAtSubmit_ = 0;
 };
 
 // Construction helper: deep-copies and creates the task; returns nullptr on failure (the error

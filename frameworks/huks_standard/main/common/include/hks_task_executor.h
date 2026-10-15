@@ -74,7 +74,7 @@ public:
         // Also, each worker's resident stack pages are the main contributor to the new static
         // RSS (4->1 further reduces the peak memory regression).
         size_t workerCount = 1;
-        size_t maxPending = 8;           // Bounded queue capacity (total = workerCount + maxPending = 9)
+        size_t maxPending = 16;          // Bounded queue capacity (total = workerCount + maxPending = 17)
         // Task deadline upper bound (ms, 15 min); bounds the client wait window,
         // last line of defense for outliers.
         uint32_t maxTimeoutMs = 900000;

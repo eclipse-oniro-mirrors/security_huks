@@ -16,6 +16,8 @@
 #include "hks_ukey_async_submit.h"
 
 #include <memory>
+#include <mutex>
+#include <unordered_map>
 
 #include "hks_error_code.h"
 #include "hks_log.h"
@@ -26,6 +28,7 @@
 #include "hks_type_inner.h"
 #include "hks_ukey_async_task.h"
 #include "hks_ukey_check.h"
+#include "hks_ukey_common.h"
 #include "hks_message_handler.h"
 #include "hks_ipc_service.h"
 #include <ipc_skeleton.h> // IPCSkeleton::GetCallingFullTokenID (caller token on the IPC thread)
@@ -136,8 +139,8 @@ struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msg
             break;
         case HKS_MSG_EXPORT_PUBLIC_KEY: // [keyAlias][keyOutSize(u32)][paramSet]
             if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset)) {
-                HKS_LOG_E("ukey unpack export_pub_key skip fail,
-                    msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u", msgCode, offset);
+                HKS_LOG_E("ukey unpack export_pub_key skip fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+                    msgCode, offset);
                 return nullptr;
             }
             skipBlobs = 0; // custom skip already advanced offset
@@ -145,27 +148,26 @@ struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msg
         case HKS_MSG_EXT_IMPORT_CERTIFICATE: // [resourceId][purpose(i32)][index][cert][paramSet]
             if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset) ||
                 !SkipBlobInRaw(p, remain, offset) || !SkipBlobInRaw(p, remain, offset)) {
-                HKS_LOG_E("ukey unpack import_cert skip fail,
-                    msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u", msgCode, offset);
+                HKS_LOG_E("ukey unpack import_cert skip fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+                    msgCode, offset);
                 return nullptr;
             }
             skipBlobs = 0; // custom skip already advanced offset
             break;
         default:
-            break; // skipBlobs already set above
-    }
-    // Generic blob skipping for codes that use the skipBlobs count (codes with custom skip
-    // logic set skipBlobs = 0 to skip this loop).
-    for (uint32_t i = 0; i < skipBlobs; ++i) {
-        if (!SkipBlobInRaw(p, remain, offset)) {
-            HKS_LOG_E("ukey unpack skip blob fail,
-                msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u", msgCode, offset);
-            return nullptr;
-        }
+            // Extension codes/GEN_KEY/IMPORT_WRAPPED_KEY: blob first (IMPORT_WRAPPED_KEY has 2)
+            for (uint32_t i = 0; i < skipBlobs; ++i) {
+                if (!SkipBlobInRaw(p, remain, offset)) {
+                    HKS_LOG_E("ukey unpack skip blob fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+                        msgCode, offset);
+                    return nullptr;
+                }
+            }
+            break;
     }
     if (remain - offset < sizeof(struct HksParamSet)) {
-        HKS_LOG_E("ukey unpack paramSet too short,
-            msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u remain=%u", msgCode, offset, remain);
+        HKS_LOG_E("ukey unpack paramSet too short, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u remain=%" LOG_PUBLIC "u",
+            msgCode, offset, remain);
         return nullptr;
     }
     // The paramSet has no length prefix and is written raw with 4-byte padding. HksCheckParamSet
@@ -179,7 +181,7 @@ struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msg
     }
     struct HksParamSet *paramSet = nullptr;
     (void)HksGetParamSet(header, header->paramSetSize, &paramSet);
-    HKS_LOG_I("ukey unpack paramSet %s, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u paramSetSize=%u",
+    HKS_LOG_I("ukey unpack paramSet %" LOG_PUBLIC "s, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u paramSetSize=%" LOG_PUBLIC "u",
         (paramSet == nullptr) ? "fail" : "ok", msgCode, offset, header->paramSetSize);
     return paramSet;
 }
@@ -191,11 +193,13 @@ struct HksParamSet *UnpackParamSetFromSrcData(uint32_t msgCode, const struct Hks
     const uint8_t *p = srcData.data;
     uint32_t remain = srcData.size;
     if (p == nullptr || remain < sizeof(uint32_t)) {
-        HKS_LOG_E("ukey unpack srcData invalid, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u", msgCode, remain);
+        HKS_LOG_E("ukey unpack srcData invalid, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
+            msgCode, remain);
         return nullptr;
     }
     enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
-    HKS_LOG_I("ukey unpack srcData begin, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u", msgCode, remain);
+    HKS_LOG_I("ukey unpack srcData begin, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
+        msgCode, remain);
     if (code == HKS_MSG_INIT || code == HKS_MSG_UPDATE || code == HKS_MSG_FINISH || code == HKS_MSG_ABORT) {
         return ParseThreeStageInnerParamSet(code, msgCode, p, remain);
     }
@@ -229,6 +233,200 @@ int32_t ParseTimeoutMs(uint32_t msgCode, const struct HksParamSet *paramSet, uin
 }
 } // namespace
 
+// ==================== handle → providerName routing (per-provider executor) ====================
+
+// The INIT operation receives resourceId as input and returns a handle to the client.
+// UPDATE/FINISH/ABORT only carry the handle — no resourceId. To route three-stage operations
+// to the correct per-provider executor, INIT's OnDone writes handle→providerName into this map;
+// UPDATE/FINISH/ABORT look it up by handle at submit time.
+//
+// Cleanup: FINISH/ABORT OnDone removes the entry. If the client crashes, the
+// HandleRoutingDeathRecipient (registered on the client's callback stub) fires and removes
+// the entry automatically — no timeout, no polling.
+
+struct HandleRoutingEntry {
+    std::string providerName;
+    sptr<IRemoteObject::DeathRecipient> deathRecipient;
+};
+
+static std::mutex g_handleRoutingMutex;
+static std::unordered_map<uint64_t, HandleRoutingEntry> g_handleRouting;
+
+// Death recipient registered on the client's callback stub during INIT OnDone. When the client
+// process dies, binder fires OnRemoteDied and the entry is removed. Does NOT call
+// RemoveDeathRecipient (the client is dead, binder auto-cleans). Only holds the handle value;
+// no pointers to task objects (no UAF risk).
+class HandleRoutingDeathRecipient : public IRemoteObject::DeathRecipient {
+public:
+    explicit HandleRoutingDeathRecipient(uint64_t handle) : handle_(handle) {}
+    ~HandleRoutingDeathRecipient() override = default;
+    void OnRemoteDied(const wptr<IRemoteObject> &remote) override
+    {
+        std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
+        g_handleRouting.erase(handle_);
+        HKS_LOG_I("handle routing cleaned by client death, handle=%" LOG_PUBLIC "llu",
+            static_cast<unsigned long long>(handle_));
+    }
+
+private:
+    uint64_t handle_;
+};
+
+void RegisterHandleRouting(uint64_t handle, const std::string &providerName,
+    const sptr<IRemoteObject> &clientStub)
+{
+    auto dr = sptr<HandleRoutingDeathRecipient>(new (std::nothrow) HandleRoutingDeathRecipient(handle));
+    if (dr == nullptr) {
+        HKS_LOG_E("handle routing: alloc death recipient fail, handle=%" LOG_PUBLIC "llu",
+            static_cast<unsigned long long>(handle));
+        return;
+    }
+    if (clientStub != nullptr) {
+        (void)clientStub->AddDeathRecipient(dr);
+    }
+    std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
+    g_handleRouting[handle] = { providerName, dr };
+}
+
+void UnregisterHandleRouting(uint64_t handle)
+{
+    std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
+    g_handleRouting.erase(handle);
+}
+
+std::string LookupHandleRouting(uint64_t handle)
+{
+    std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
+    auto it = g_handleRouting.find(handle);
+    if (it != g_handleRouting.end()) {
+        return it->second.providerName;
+    }
+    return ""; // not found → fallback to global executor
+}
+
+// Extracts providerName from srcData for routing purposes.
+// - Non-three-stage codes: the first blob is resourceId JSON (or providerName for
+//   EXPORT_PROVIDER_CERTIFICATES / GET_RESOURCE_ID).
+// - INIT: the wrapper paramSet's PARAM0_BUFFER = keyAlias (= resourceId JSON).
+// - UPDATE/FINISH/ABORT: PARAM1_BUFFER = handle (uint64_t) → lookup g_handleRouting.
+// Returns "" on failure (the task falls back to the global executor; business-layer
+// error handling is unchanged — the handler itself re-parses resourceId and returns
+// the original error code if the format is invalid).
+static std::string ExtractProviderName(uint32_t msgCode, const struct HksBlob &srcData)
+{
+    const uint8_t *p = srcData.data;
+    uint32_t remain = srcData.size;
+    if (p == nullptr || remain < sizeof(uint32_t)) {
+        return "";
+    }
+    enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
+
+    // Three-stage codes: srcData is a wrapper paramSet
+    if (code == HKS_MSG_INIT || code == HKS_MSG_UPDATE ||
+        code == HKS_MSG_FINISH || code == HKS_MSG_ABORT) {
+        struct HksParamSet *wrapper = nullptr;
+        if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
+            return "";
+        }
+        struct HksBlob param0 = { 0, nullptr };
+        struct HksBlob param1 = { 0, nullptr };
+        struct HksParamOut params[] = {
+            { .tag = HKS_TAG_PARAM0_BUFFER, .blob = &param0 },
+            { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
+        };
+        std::string result;
+        do {
+            if (HksParamSetToParams(wrapper, params, HKS_ARRAY_SIZE(params)) != HKS_SUCCESS) {
+                break;
+            }
+            if (code == HKS_MSG_INIT) {
+                // INIT: PARAM0 = keyAlias (= resourceId JSON)
+                const struct HksBlob *real = (param0.size > 0) ? &param0 : &param1;
+                if (real->data == nullptr || real->size == 0) {
+                    break;
+                }
+                std::string resourceId(reinterpret_cast<const char *>(real->data), real->size);
+                OHOS::Security::Huks::ProviderInfo info;
+                std::string newIndex;
+                if (OHOS::Security::Huks::GetProviderInfoAndIndex(resourceId, info, newIndex) == HKS_SUCCESS) {
+                    result = info.m_providerName;
+                }
+            } else {
+                // UPDATE/FINISH/ABORT: PARAM1 = handle (uint64_t)
+                if (param1.data == nullptr || param1.size < sizeof(uint64_t)) {
+                    break;
+                }
+                uint64_t handle = 0;
+                (void)memcpy_s(&handle, sizeof(handle), param1.data, sizeof(uint64_t));
+                result = LookupHandleRouting(handle);
+            }
+        } while (false);
+        HksFreeParamSet(&wrapper);
+        return result;
+    }
+
+    // Non-three-stage: first blob is resourceId JSON or providerName string.
+    // Layout: [uint32 len | blob(4-aligned)] [paramSet]
+    uint32_t blobLen = 0;
+    if (remain < sizeof(uint32_t)) {
+        return "";
+    }
+    (void)memcpy_s(&blobLen, sizeof(blobLen), p, sizeof(uint32_t));
+    if (remain - sizeof(uint32_t) < blobLen) {
+        return "";
+    }
+    std::string firstBlob(reinterpret_cast<const char *>(p + sizeof(uint32_t)), blobLen);
+
+    // EXPORT_PROVIDER_CERTIFICATES and GET_RESOURCE_ID: first blob is providerName directly
+    if (code == HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES || code == HKS_MSG_EXT_GET_RESOURCE_ID) {
+        return firstBlob;
+    }
+
+    // Other codes: first blob is resourceId JSON
+    OHOS::Security::Huks::ProviderInfo info;
+    std::string newIndex;
+    if (OHOS::Security::Huks::GetProviderInfoAndIndex(firstBlob, info, newIndex) == HKS_SUCCESS) {
+        return info.m_providerName;
+    }
+    return "";
+}
+
+// Extracts the handle (uint64_t) from UPDATE/FINISH/ABORT srcData for routing table cleanup.
+// PARAM1_BUFFER carries the handle. Returns 0 on failure (OnDone skips cleanup).
+static uint64_t ExtractHandleFromSrcData(uint32_t msgCode, const struct HksBlob &srcData)
+{
+    enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
+    if (code != HKS_MSG_UPDATE && code != HKS_MSG_FINISH && code != HKS_MSG_ABORT) {
+        return 0;
+    }
+    const uint8_t *p = srcData.data;
+    uint32_t remain = srcData.size;
+    if (p == nullptr || remain < sizeof(uint32_t)) {
+        return 0;
+    }
+    struct HksParamSet *wrapper = nullptr;
+    if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
+        return 0;
+    }
+    struct HksBlob param1 = { 0, nullptr };
+    struct HksParamOut params[] = {
+        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = nullptr },
+        { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
+    };
+    uint64_t handle = 0;
+    do {
+        if (HksParamSetToParams(wrapper, params, HKS_ARRAY_SIZE(params)) != HKS_SUCCESS) {
+            break;
+        }
+        if (param1.data == nullptr || param1.size < sizeof(uint64_t)) {
+            break;
+        }
+        (void)memcpy_s(&handle, sizeof(handle), param1.data, sizeof(uint64_t));
+    } while (false);
+    HksFreeParamSet(&wrapper);
+    return handle;
+}
+
 // Submit-request parameter bundle (ukey async admission inputs): HksSubmitUkeyAsyncTask's
 // original 6 parameters exceeded the "at most 5 function parameters" coding rule, so they are
 // bundled into a struct (context is passed separately as the IPC-thread context).
@@ -238,6 +436,8 @@ struct HksUkeySubmitParams {
     struct HksBlob srcData = { 0, nullptr };       // Client-packed buffer (deep-copied at task construction)
     uint32_t outSize = 0;                          // Client-reported output buffer size
     sptr<IRemoteObject> clientStub;                // Client callback object (refcounted)
+    std::string routingKey;                        // providerName for per-provider executor routing
+    uint64_t handleAtSubmit = 0;                    // handle for FINISH/ABORT routing table cleanup
 };
 
 bool HksIsUkeyStandardMsgCode(uint32_t code, const struct HksBlob &srcData)
@@ -257,8 +457,9 @@ bool HksIsUkeyStandardMsgCode(uint32_t code, const struct HksBlob &srcData)
     }
     int32_t ukeyRet = 0;
     bool isUkey = (HksCheckIsUkeyOperation(paramSet, &ukeyRet) == HKS_SUCCESS);
-    HKS_LOG_I("ukey standard msg code=%" LOG_PUBLIC "u isUkey=%" LOG_PUBLIC "d ukeyRet=%" LOG_PUBLIC "d",
-        code, isUkey ? 1 : 0, ukeyRet);
+    if (isUkey) {
+        HKS_LOG_I("ukey standard msg, code=%" LOG_PUBLIC "u", code);
+    }
     HksFreeParamSet(&paramSet);
     return isUkey;
 }
@@ -380,8 +581,8 @@ int32_t HksSubmitUkeyAsyncTask(const HksUkeySubmitParams &request, const uint8_t
         return RejectUkeyAsync(request.clientStub, request.msgCode, ret);
     }
     uint64_t fullTokenId = IPCSkeleton::GetCallingFullTokenID();
-    HKS_IF_TRUE_LOGE(fullTokenId == 0, "ukey submit calling full tokenId is zero,
-        msgCode=%" LOG_PUBLIC "u", request.msgCode)
+    HKS_IF_TRUE_LOGE(fullTokenId == 0, "ukey submit calling full tokenId is zero, msgCode=%" LOG_PUBLIC "u",
+        request.msgCode)
 
     // Inject the dispatch target via table lookup (single source of truth): extension codes +
     // reused standard single-arg codes -> MESSAGE_HANDLER table; three-stage codes -> THREE_STAGE
@@ -413,6 +614,8 @@ int32_t HksSubmitUkeyAsyncTask(const HksUkeySubmitParams &request, const uint8_t
     taskParams.outSize = request.outSize;
     taskParams.fullTokenId = fullTokenId;
     taskParams.clientStub = request.clientStub;
+    taskParams.routingKey = request.routingKey;
+    taskParams.handleAtSubmit = request.handleAtSubmit;
 
     // Construct the task (the constructor deep-copies srcData + the processInfo embedded blobs;
     // on failure the processInfo is released).
@@ -427,8 +630,9 @@ int32_t HksSubmitUkeyAsyncTask(const HksUkeySubmitParams &request, const uint8_t
     std::unique_ptr<HksAsyncTask> task(rawTask);
 
     // Submit (rejections BUSY/STOPPED/INVALID are all replied immediately via the callback —
-    // the client does not wait).
-    int32_t acceptRaw = pluginLoader->SubmitTaskExecutor(std::move(task));
+    // the client does not wait). Per-provider routing: the routingKey (providerName) selects
+    // the executor; empty routingKey falls back to the global executor.
+    int32_t acceptRaw = pluginLoader->SubmitTaskExecutor(request.routingKey, std::move(task));
     HandleSubmitAccept(request.clientStub, request.msgCode, timeoutMs, acceptRaw);
     return HKS_SUCCESS; // admission receipt (always SUCCESS; the real result comes via the callback)
 }
@@ -498,6 +702,8 @@ bool HksTrySubmitUkeyAsyncMsg(uint32_t code, MessageParcel &data, uint32_t outSi
     request.srcData = srcData;
     request.outSize = outSize;
     request.clientStub = clientStub;
+    request.routingKey = ExtractProviderName(code, srcData);
+    request.handleAtSubmit = ExtractHandleFromSrcData(code, srcData);
     HksSubmitUkeyAsyncTask(request, context);
     HKS_LOG_I("ukey try submit done, code=%" LOG_PUBLIC "u (async accepted, reply via callback)", code);
     HksFreeParamSet(&paramSet);
