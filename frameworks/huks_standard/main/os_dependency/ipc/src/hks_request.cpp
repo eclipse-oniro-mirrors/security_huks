@@ -84,16 +84,6 @@ int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInter
 // standard codes are ukey only when KEY_CLASS == EXTENSION (requires non-null paramSet).
 bool HksIsUkeyOperationMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
 {
-    // Backward compatibility gate: no paramSet or no timeout tag -> sync (legacy behavior).
-    if (paramSet == nullptr) {
-        return false;
-    }
-    struct HksParam *timeoutParam = nullptr;
-    enum HksTag timeoutTag = HksUkeyTimeoutTagByMsgCode(static_cast<uint32_t>(msgCode));
-    if (HksGetParam(paramSet, timeoutTag, &timeoutParam) != HKS_SUCCESS) {
-        return false; // no timeout tag -> sync
-    }
-
     switch (msgCode) {
         case HKS_MSG_EXT_AUTH_UKEY_PIN:
         case HKS_MSG_EXT_GET_UKEY_PIN_AUTH_STATE:
@@ -119,10 +109,8 @@ bool HksIsUkeyOperationMsg(enum HksIpcInterfaceCode msgCode, const struct HksPar
         msgCode == HKS_MSG_UPDATE || msgCode == HKS_MSG_FINISH || msgCode == HKS_MSG_ABORT) {
         int32_t outRet = 0;
         bool isUkey = (HksCheckIsUkeyOperation(paramSet, &outRet) == HKS_SUCCESS);
-        if (isUkey) {
-            HKS_LOG_I("ukey client check, code=%" LOG_PUBLIC "u outRet=%" LOG_PUBLIC "d",
-                static_cast<uint32_t>(msgCode), outRet);
-        }
+        HKS_IF_NOT_TRUE_LOGI(!isUkey, "ukey client check, code=%" LOG_PUBLIC "u outRet=%" LOG_PUBLIC "d",
+            static_cast<uint32_t>(msgCode), outRet);
         return isUkey;
     }
     return false;

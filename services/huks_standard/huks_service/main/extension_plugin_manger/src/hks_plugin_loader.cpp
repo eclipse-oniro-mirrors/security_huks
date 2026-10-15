@@ -173,29 +173,22 @@ int32_t HuksPluginLoader::SubmitTaskExecutor(const std::string &providerName,
         return static_cast<int32_t>(executor->Submit(std::move(task)));
     }
     // Per-provider executor: created on first use (1 worker + 16 pending), isolating slow
-    // operations from other providers. executorMutex_ (not libMutex) protects the map;
-    // GetOrCreateExecutor does Start() under executorMutex_, and StopExecutorForProvider
-    // does Stop()+join under executorMutex_ — neither holds libMutex during join, avoiding
-    // deadlock with the AutoRefCount dispatch path.
-    auto *executor = GetOrCreateExecutor(providerName);
-    HKS_IF_TRUE_RETURN(executor == nullptr, -1)
-    return static_cast<int32_t>(executor->Submit(std::move(task)));
-}
-
-OHOS::Security::Hks::HksTaskExecutor *HuksPluginLoader::GetOrCreateExecutor(const std::string &providerName)
-{
+    // operations from other providers. executorMutex_ protects the map and is held across
+    // Submit to prevent a UAF window: without holding the lock, a concurrent
+    // StopExecutorForProvider could remove and destroy the executor between the lookup
+    // and the Submit call. Submit is O(1) (push_back + notify, no blocking), so the lock
+    // hold time is negligible. StopExecutorForProvider's Stop()+join runs outside the lock.
     std::lock_guard<std::mutex> lock(executorMutex_);
     auto it = executors_.find(providerName);
     if (it != executors_.end()) {
-        return it->second.get();
+        return static_cast<int32_t>(it->second->Submit(std::move(task)));
     }
-    auto executor = std::make_unique<OHOS::Security::Hks::HksTaskExecutor>(
-        OHOS::Security::Hks::HksTaskExecutor::Config{});
-    executor->Start();
-    auto *ptr = executor.get();
-    executors_[providerName] = std::move(executor);
+    auto newExecutor = std::make_unique<HksTaskExecutor>(HksTaskExecutor::Config{});
+    newExecutor->Start();
+    int32_t acceptRaw = static_cast<int32_t>(newExecutor->Submit(std::move(task)));
     HKS_LOG_I("per-provider executor created, provider=%{public}s", providerName.c_str());
-    return ptr;
+    executors_[providerName] = std::move(newExecutor);
+    return acceptRaw;
 }
 
 int32_t HuksPluginLoader::StopExecutorForProvider(const std::string &providerName)

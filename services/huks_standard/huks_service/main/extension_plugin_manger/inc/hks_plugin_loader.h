@@ -84,7 +84,6 @@ private:
     // libMutex to avoid deadlock: Stop+join must not hold libMutex).
     std::mutex executorMutex_;
     std::unordered_map<std::string, std::unique_ptr<OHOS::Security::Hks::HksTaskExecutor>> executors_;
-    OHOS::Security::Hks::HksTaskExecutor *GetOrCreateExecutor(const std::string &providerName);
 };
 }
 }

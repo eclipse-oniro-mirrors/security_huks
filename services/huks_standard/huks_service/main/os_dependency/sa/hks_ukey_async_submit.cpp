@@ -87,14 +87,12 @@ struct HksParamSet *ParseThreeStageInnerParamSet(enum HksIpcInterfaceCode code, 
             msgCode, remain);
         return nullptr;
     }
-    struct HksParamOut params[] = {
-        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = nullptr },
-        { .tag = HKS_TAG_PARAM1_BUFFER, .blob = nullptr },
-    };
     struct HksBlob param0 = { 0, nullptr };
     struct HksBlob param1 = { 0, nullptr };
-    params[0].blob = &param0;
-    params[1].blob = &param1;
+    struct HksParamOut params[] = {
+        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = &param0 },
+        { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
+    };
     struct HksParamSet *inner = nullptr;
     do {
         if (HksParamSetToParams(wrapper, params, HKS_ARRAY_SIZE(params)) != HKS_SUCCESS) {
@@ -408,9 +406,10 @@ static uint64_t ExtractHandleFromSrcData(uint32_t msgCode, const struct HksBlob 
     if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
         return 0;
     }
+    struct HksBlob param0 = { 0, nullptr };
     struct HksBlob param1 = { 0, nullptr };
     struct HksParamOut params[] = {
-        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = nullptr },
+        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = &param0 },
         { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
     };
     uint64_t handle = 0;
