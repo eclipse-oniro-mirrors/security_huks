@@ -303,17 +303,31 @@ void RegisterHandleRouting(uint64_t handle, const std::string &providerName,
             static_cast<unsigned long long>(handle));
         return;
     }
+
+    {
+        std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
+        g_handleRouting[handle] = { providerName, dr };
+    }
     if (clientStub != nullptr) {
         (void)clientStub->AddDeathRecipient(dr);
     }
-    std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
-    g_handleRouting[handle] = { providerName, dr };
 }
 
-void UnregisterHandleRouting(uint64_t handle)
+void UnregisterHandleRouting(uint64_t handle, const sptr<IRemoteObject> &clientStub)
 {
-    std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
-    g_handleRouting.erase(handle);
+    sptr<IRemoteObject::DeathRecipient> dr;
+    {
+        std::lock_guard<std::mutex> lock(g_handleRoutingMutex);
+        auto it = g_handleRouting.find(handle);
+        if (it == g_handleRouting.end()) {
+            return;
+        }
+        dr = it->second.deathRecipient;
+        g_handleRouting.erase(it);
+    }
+    if (clientStub != nullptr && dr != nullptr) {
+        (void)clientStub->RemoveDeathRecipient(dr);
+    }
 }
 
 std::string LookupHandleRouting(uint64_t handle)

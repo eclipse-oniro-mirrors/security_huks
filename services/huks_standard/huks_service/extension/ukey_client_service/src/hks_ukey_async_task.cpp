@@ -33,7 +33,7 @@
 namespace OHOS { namespace Security { namespace Hks {
 void RegisterHandleRouting(uint64_t handle, const std::string &providerName,
     const sptr<IRemoteObject> &clientStub);
-void UnregisterHandleRouting(uint64_t handle);
+void UnregisterHandleRouting(uint64_t handle, const sptr<IRemoteObject> &clientStub);
 } } }
 
 namespace OHOS {
@@ -227,7 +227,7 @@ void HksUkeyAsyncTask::OnDone(int32_t ret)
         RegisterHandleRouting(handle, routingKey_, clientStub_);
     }
     if ((msgCode_ == HKS_MSG_FINISH || msgCode_ == HKS_MSG_ABORT) && handleAtSubmit_ != 0) {
-        UnregisterHandleRouting(handleAtSubmit_);
+        UnregisterHandleRouting(handleAtSubmit_, clientStub_);
     }
 
     // Reply via the client callback object (wire code = original request code, errCode = real
