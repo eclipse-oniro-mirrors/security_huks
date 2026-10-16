@@ -207,9 +207,6 @@ int32_t HuksPluginLoader::SubmitTaskExecutor(const std::string &providerName,
 
 int32_t HuksPluginLoader::StopExecutorForProvider(const std::string &providerName)
 {
-    // Stop() blocks until in-flight tasks finish (<=60s);
-    // holding libMutex during join would deadlock with AutoRefCount (worker dispatch path
-    // needs libMutex). executorMutex_ is separate and safe to hold during join.
     std::unique_ptr<OHOS::Security::Hks::HksTaskExecutor> executorToStop;
     {
         std::lock_guard<std::mutex> lock(executorMutex_);

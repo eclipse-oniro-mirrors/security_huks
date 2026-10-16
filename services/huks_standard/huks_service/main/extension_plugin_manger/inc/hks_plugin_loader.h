@@ -35,7 +35,7 @@
 
 // forward declarations (avoid a header dependency cycle: the thread-pool header lives in
 // common, only pointer types are needed here)
-#inlcude "hks_task_executor.h"
+#include "hks_task_executor.h"
 
 namespace OHOS {
 namespace Security {
