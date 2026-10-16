@@ -641,7 +641,7 @@ static bool IsInitSyncPath(uint32_t code, const struct HksBlob &srcData)
 bool HksTrySubmitUkeyAsyncMsg(uint32_t code, MessageParcel &data, uint32_t outSize,
     const struct HksBlob &srcData, const uint8_t *context)
 {
-    HKS_IF_NOT_TRUE_LOGI_RETURN(IsInitSyncPath(code, srcData), false,
+    HKS_IF_TRUE_LOGI_RETURN(IsInitSyncPath(code, srcData), false,
         "ukey init sync path (no timeout tag), code=%" LOG_PUBLIC "u", code);
 
     sptr<IRemoteObject> clientStub = data.ReadRemoteObject();
