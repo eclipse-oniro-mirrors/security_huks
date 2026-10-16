@@ -29,16 +29,12 @@
 #include "hks_template.h"
 #include "securec.h"
 
-// handle→providerName routing table (defined in hks_ukey_async_submit.cpp)
-namespace OHOS { namespace Security { namespace Hks {
-void RegisterHandleRouting(uint64_t handle, const std::string &providerName,
-    const sptr<IRemoteObject> &clientStub);
-void UnregisterHandleRouting(uint64_t handle, const sptr<IRemoteObject> &clientStub);
-} } }
-
 namespace OHOS {
 namespace Security {
 namespace Hks {
+
+void RegisterHandleRouting(uint64_t handle, const std::string &providerName, const sptr<IRemoteObject> &clientStub);
+void UnregisterHandleRouting(uint64_t handle, const sptr<IRemoteObject> &clientStub);
 
 namespace {
 // Deep-copies a HksBlob (allocated with HksMalloc; sensitive-data zeroing and release are
