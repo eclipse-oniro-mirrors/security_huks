@@ -119,59 +119,74 @@ struct HksParamSet *ParseThreeStageInnerParamSet(enum HksIpcInterfaceCode code, 
 //   IMPORT_WRAPPED_KEY:                  [alias][wrapAlias][paramSet][data] -> skip 2 blobs
 // Operations without a paramSet (e.g. CLEAR_PIN_AUTH_STATE) return NULL (valid; timeout uses
 // the default and identity goes through the thread context).
-struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msgCode,
-    const uint8_t *p, uint32_t remain)
+// IMPORT_CERTIFICATE has an interleaved layout [blob][u32][blob][blob] — the u32 sits
+// between blobs, so it cannot use the sequential skipBlobs+skipU32s pattern.
+static bool SkipImportCertLeadingFields(const uint8_t *p, uint32_t remain,
+    uint32_t msgCode, uint32_t &offset)
 {
-    // Default layout: blob first (1 for extension codes and GEN_KEY; 2 for IMPORT_WRAPPED_KEY)
-    uint32_t offset = 0;
+    if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset) ||
+        !SkipBlobInRaw(p, remain, offset) || !SkipBlobInRaw(p, remain, offset)) {
+        HKS_LOG_E("ukey unpack import_cert skip fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+            msgCode, offset);
+        return false;
+    }
+    return true;
+}
+
+// Skip the leading fields (blobs/uint32s) that precede the paramSet in the wire layout,
+// based on the message code. Returns false on bounds failure; sets offset to the paramSet start.
+static bool SkipLeadingFieldsForParamSet(enum HksIpcInterfaceCode code, uint32_t msgCode,
+    const uint8_t *p, uint32_t remain, uint32_t &offset)
+{
+    if (code == HKS_MSG_EXT_IMPORT_CERTIFICATE) {
+        return SkipImportCertLeadingFields(p, remain, msgCode, offset);
+    }
+    // Sequential layout: N blobs then M u32s, all before the paramSet.
     uint32_t skipBlobs = (code == HKS_MSG_IMPORT_WRAPPED_KEY) ? 2 : 1;
+    uint32_t skipU32s = 0;
     switch (code) {
         case HKS_MSG_EXT_CLEAR_PIN_AUTH_STATE:
-            // [index blob][paramSet] — BuildParamSetNotNull always creates a paramSet.
             skipBlobs = 1;
             break;
-        case HKS_MSG_EXT_QUERY_ABILITY_INFO:
-            // [blob1][blob2][blob3][paramSet?] — paramSet absent when paramSetIn is NULL
-            // (HksBlob3ParamSetPack omits it); the tail check below returns nullptr in that case.
+        case HKS_MSG_EXT_QUERY_ABILITY_INFO: // [blob1][blob2][blob3][abilityType u32]
             skipBlobs = 3;
+            skipU32s = 1;
             break;
-        case HKS_MSG_EXPORT_PUBLIC_KEY: // [keyAlias][keyOutSize(u32)][paramSet]
-            if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset)) {
-                HKS_LOG_E("ukey unpack export_pub_key skip fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
-                    msgCode, offset);
-                return nullptr;
-            }
-            skipBlobs = 0; // custom skip already advanced offset
-            break;
-        case HKS_MSG_EXT_IMPORT_CERTIFICATE: // [resourceId][purpose(i32)][index][cert][paramSet]
-            if (!SkipBlobInRaw(p, remain, offset) || !SkipUint32InRaw(remain, offset) ||
-                !SkipBlobInRaw(p, remain, offset) || !SkipBlobInRaw(p, remain, offset)) {
-                HKS_LOG_E("ukey unpack import_cert skip fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
-                    msgCode, offset);
-                return nullptr;
-            }
-            skipBlobs = 0; // custom skip already advanced offset
+        case HKS_MSG_EXPORT_PUBLIC_KEY: // [keyAlias][keyOutSize u32]
+            skipBlobs = 1;
+            skipU32s = 1;
             break;
         default:
-            // Extension codes/GEN_KEY/IMPORT_WRAPPED_KEY: blob first (IMPORT_WRAPPED_KEY has 2)
-            for (uint32_t i = 0; i < skipBlobs; ++i) {
-                if (!SkipBlobInRaw(p, remain, offset)) {
-                    HKS_LOG_E("ukey unpack skip blob fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
-                        msgCode, offset);
-                    return nullptr;
-                }
-            }
             break;
     }
+    for (uint32_t i = 0; i < skipBlobs; ++i) {
+        if (!SkipBlobInRaw(p, remain, offset)) {
+            HKS_LOG_E("ukey unpack skip blob fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+                msgCode, offset);
+            return false;
+        }
+    }
+    for (uint32_t i = 0; i < skipU32s; ++i) {
+        if (!SkipUint32InRaw(remain, offset)) {
+            HKS_LOG_E("ukey unpack skip u32 fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+                msgCode, offset);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Parse the paramSet at the given offset in the raw buffer. The paramSet has no length prefix
+// and is written raw with 4-byte padding — parsed by the header-declared paramSetSize (after
+// verifying the aligned size stays in bounds). Returns nullptr on any parse failure.
+static struct HksParamSet *ParseParamSetAtOffset(const uint8_t *p, uint32_t offset,
+    uint32_t remain, uint32_t msgCode)
+{
     if (remain - offset < sizeof(struct HksParamSet)) {
         HKS_LOG_E("ukey unpack paramSet too short, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u remain=%" LOG_PUBLIC "u",
             msgCode, offset, remain);
         return nullptr;
     }
-    // The paramSet has no length prefix and is written raw with 4-byte padding. HksCheckParamSet
-    // requires paramSetSize == size; since the tail carries alignment padding, remain-offset
-    // cannot be passed directly as size — parse exactly by the header-declared paramSetSize
-    // (first verify the aligned size stays in bounds).
     const struct HksParamSet *header = reinterpret_cast<const struct HksParamSet *>(p + offset);
     if (IsAdditionOverflow(header->paramSetSize, DEFAULT_ALIGN_MASK_SIZE) ||
         ALIGN_SIZE(header->paramSetSize) > (remain - offset)) {
@@ -182,6 +197,16 @@ struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msg
     HKS_LOG_I("ukey unpack paramSet %" LOG_PUBLIC "s, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u paramSetSize=%" LOG_PUBLIC "u",
         (paramSet == nullptr) ? "fail" : "ok", msgCode, offset, header->paramSetSize);
     return paramSet;
+}
+
+struct HksParamSet *ParseRawParamSet(enum HksIpcInterfaceCode code, uint32_t msgCode,
+    const uint8_t *p, uint32_t remain)
+{
+    uint32_t offset = 0;
+    if (!SkipLeadingFieldsForParamSet(code, msgCode, p, remain, offset)) {
+        return nullptr;
+    }
+    return ParseParamSetAtOffset(p, offset, remain, msgCode);
 }
 
 // Extracts the embedded paramSet from the client-packed buffer. Returns a malloc'd paramSet
@@ -302,91 +327,102 @@ std::string LookupHandleRouting(uint64_t handle)
     return ""; // not found → fallback to global executor
 }
 
-// Extracts providerName from srcData for routing purposes.
-// - Non-three-stage codes: the first blob is resourceId JSON (or providerName for
-//   EXPORT_PROVIDER_CERTIFICATES / GET_RESOURCE_ID).
-// - INIT: the wrapper paramSet's PARAM0_BUFFER = keyAlias (= resourceId JSON).
-// - UPDATE/FINISH/ABORT: PARAM1_BUFFER = handle (uint64_t) → lookup g_handleRouting.
-// Returns "" on failure (the task falls back to the global executor; business-layer
-// error handling is unchanged — the handler itself re-parses resourceId and returns
-// the original error code if the format is invalid).
-static std::string ExtractProviderName(uint32_t msgCode, const struct HksBlob &srcData)
+static std::string ProviderNameFromResourceId(const std::string &resourceId)
+{
+    OHOS::Security::Huks::ProviderInfo info;
+    std::string newIndex;
+    if (OHOS::Security::Huks::GetProviderInfoAndIndex(resourceId, info, newIndex) == HKS_SUCCESS) {
+        return info.m_providerName;
+    }
+    return "";
+}
+
+// Parse the three-stage wrapper paramSet from srcData, extracting PARAM0_BUFFER and
+// PARAM1_BUFFER. On success, wrapper is allocated (caller frees via HksFreeParamSet) and
+// param0/param1 are filled. Returns false on any parse failure (wrapper already freed).
+// Shared by ExtractProviderNameThreeStage and ExtractHandleFromSrcData.
+static bool ParseThreeStageWrapper(const struct HksBlob &srcData,
+    struct HksParamSet *&wrapper, struct HksBlob &param0, struct HksBlob &param1)
+{
+    const uint8_t *p = srcData.data;
+    uint32_t remain = srcData.size;
+    if (p == nullptr || remain < sizeof(uint32_t)) {
+        return false;
+    }
+    if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
+        return false;
+    }
+    struct HksParamOut params[] = {
+        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = &param0 },
+        { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
+    };
+    if (HksParamSetToParams(wrapper, params, HKS_ARRAY_SIZE(params)) != HKS_SUCCESS) {
+        HksFreeParamSet(&wrapper);
+        return false;
+    }
+    return true;
+}
+
+// Three-stage INIT: wrapper PARAM0 (or PARAM1) = resourceId JSON → providerName.
+// Three-stage UPDATE/FINISH/ABORT: wrapper PARAM1 = handle (uint64_t) → routing lookup.
+static std::string ExtractProviderNameThreeStage(enum HksIpcInterfaceCode code, const struct HksBlob &srcData)
+{
+    struct HksParamSet *wrapper = nullptr;
+    struct HksBlob param0 = { 0, nullptr };
+    struct HksBlob param1 = { 0, nullptr };
+    std::string result;
+    if (!ParseThreeStageWrapper(srcData, wrapper, param0, param1)) {
+        return result;
+    }
+    if (code == HKS_MSG_INIT) {
+        const struct HksBlob *real = (param0.size > 0) ? &param0 : &param1;
+        if (real->data != nullptr && real->size > 0) {
+            std::string resourceId(reinterpret_cast<const char *>(real->data), real->size);
+            result = ProviderNameFromResourceId(resourceId);
+        }
+    } else {
+        if (param1.data != nullptr && param1.size >= sizeof(uint64_t)) {
+            uint64_t handle = 0;
+            (void)memcpy_s(&handle, sizeof(handle), param1.data, sizeof(uint64_t));
+            result = LookupHandleRouting(handle);
+        }
+    }
+    HksFreeParamSet(&wrapper);
+    return result;
+}
+
+// Non-three-stage: first blob is providerName (EXPORT/GET_RESOURCE) or resourceId JSON.
+// Layout: [uint32 len | blob(4-aligned)] [paramSet]
+static std::string ExtractProviderNameNonThreeStage(enum HksIpcInterfaceCode code, const struct HksBlob &srcData)
 {
     const uint8_t *p = srcData.data;
     uint32_t remain = srcData.size;
     if (p == nullptr || remain < sizeof(uint32_t)) {
         return "";
     }
-    enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
-
-    // Three-stage codes: srcData is a wrapper paramSet
-    if (code == HKS_MSG_INIT || code == HKS_MSG_UPDATE ||
-        code == HKS_MSG_FINISH || code == HKS_MSG_ABORT) {
-        struct HksParamSet *wrapper = nullptr;
-        if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
-            return "";
-        }
-        struct HksBlob param0 = { 0, nullptr };
-        struct HksBlob param1 = { 0, nullptr };
-        struct HksParamOut params[] = {
-            { .tag = HKS_TAG_PARAM0_BUFFER, .blob = &param0 },
-            { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
-        };
-        std::string result;
-        do {
-            if (HksParamSetToParams(wrapper, params, HKS_ARRAY_SIZE(params)) != HKS_SUCCESS) {
-                break;
-            }
-            if (code == HKS_MSG_INIT) {
-                // INIT: PARAM0 = keyAlias (= resourceId JSON)
-                const struct HksBlob *real = (param0.size > 0) ? &param0 : &param1;
-                if (real->data == nullptr || real->size == 0) {
-                    break;
-                }
-                std::string resourceId(reinterpret_cast<const char *>(real->data), real->size);
-                OHOS::Security::Huks::ProviderInfo info;
-                std::string newIndex;
-                if (OHOS::Security::Huks::GetProviderInfoAndIndex(resourceId, info, newIndex) == HKS_SUCCESS) {
-                    result = info.m_providerName;
-                }
-            } else {
-                // UPDATE/FINISH/ABORT: PARAM1 = handle (uint64_t)
-                if (param1.data == nullptr || param1.size < sizeof(uint64_t)) {
-                    break;
-                }
-                uint64_t handle = 0;
-                (void)memcpy_s(&handle, sizeof(handle), param1.data, sizeof(uint64_t));
-                result = LookupHandleRouting(handle);
-            }
-        } while (false);
-        HksFreeParamSet(&wrapper);
-        return result;
-    }
-
-    // Non-three-stage: first blob is resourceId JSON or providerName string.
-    // Layout: [uint32 len | blob(4-aligned)] [paramSet]
     uint32_t blobLen = 0;
-    if (remain < sizeof(uint32_t)) {
-        return "";
-    }
     (void)memcpy_s(&blobLen, sizeof(blobLen), p, sizeof(uint32_t));
     if (remain - sizeof(uint32_t) < blobLen) {
         return "";
     }
     std::string firstBlob(reinterpret_cast<const char *>(p + sizeof(uint32_t)), blobLen);
-
-    // EXPORT_PROVIDER_CERTIFICATES and GET_RESOURCE_ID: first blob is providerName directly
     if (code == HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES || code == HKS_MSG_EXT_GET_RESOURCE_ID) {
         return firstBlob;
     }
+    return ProviderNameFromResourceId(firstBlob);
+}
 
-    // Other codes: first blob is resourceId JSON
-    OHOS::Security::Huks::ProviderInfo info;
-    std::string newIndex;
-    if (OHOS::Security::Huks::GetProviderInfoAndIndex(firstBlob, info, newIndex) == HKS_SUCCESS) {
-        return info.m_providerName;
+// Extracts providerName from srcData for routing purposes. Returns "" on failure (the task
+// falls back to the global executor; the handler itself re-parses and returns the original
+// error code if the format is invalid).
+static std::string ExtractProviderName(uint32_t msgCode, const struct HksBlob &srcData)
+{
+    enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
+    if (code == HKS_MSG_INIT || code == HKS_MSG_UPDATE ||
+        code == HKS_MSG_FINISH || code == HKS_MSG_ABORT) {
+        return ExtractProviderNameThreeStage(code, srcData);
     }
-    return "";
+    return ExtractProviderNameNonThreeStage(code, srcData);
 }
 
 // Extracts the handle (uint64_t) from UPDATE/FINISH/ABORT srcData for routing table cleanup.
@@ -397,31 +433,14 @@ static uint64_t ExtractHandleFromSrcData(uint32_t msgCode, const struct HksBlob 
     if (code != HKS_MSG_UPDATE && code != HKS_MSG_FINISH && code != HKS_MSG_ABORT) {
         return 0;
     }
-    const uint8_t *p = srcData.data;
-    uint32_t remain = srcData.size;
-    if (p == nullptr || remain < sizeof(uint32_t)) {
-        return 0;
-    }
     struct HksParamSet *wrapper = nullptr;
-    if (HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(p), remain, &wrapper) != HKS_SUCCESS) {
-        return 0;
-    }
     struct HksBlob param0 = { 0, nullptr };
     struct HksBlob param1 = { 0, nullptr };
-    struct HksParamOut params[] = {
-        { .tag = HKS_TAG_PARAM0_BUFFER, .blob = &param0 },
-        { .tag = HKS_TAG_PARAM1_BUFFER, .blob = &param1 },
-    };
     uint64_t handle = 0;
-    do {
-        if (HksParamSetToParams(wrapper, params, HKS_ARRAY_SIZE(params)) != HKS_SUCCESS) {
-            break;
-        }
-        if (param1.data == nullptr || param1.size < sizeof(uint64_t)) {
-            break;
-        }
+    if (ParseThreeStageWrapper(srcData, wrapper, param0, param1) &&
+        param1.data != nullptr && param1.size >= sizeof(uint64_t)) {
         (void)memcpy_s(&handle, sizeof(handle), param1.data, sizeof(uint64_t));
-    } while (false);
+    }
     HksFreeParamSet(&wrapper);
     return handle;
 }

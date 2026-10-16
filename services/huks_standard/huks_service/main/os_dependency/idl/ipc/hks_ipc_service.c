@@ -207,8 +207,7 @@ void HksIpcServiceQueryAbilityInfo(const struct HksBlob *srcData, const uint8_t 
     int32_t ret;
 
     do {
-        ret = HksBlob3ParamSetUnpack(srcData, &resourceId, &abilityInfo.bundleName,
-            &abilityInfo.abilityName, &paramSet);
+        ret = HksAbilityAndParamSetUnpack(srcData, &resourceId, &abilityInfo, &paramSet);
         HKS_IF_NOT_SUCC_BREAK(ret, "HksIpcServiceQueryAbilityInfo Ipc fail")
 
         ret = HksGetProcessInfoForIPC(paramSet, context, &processInfo);

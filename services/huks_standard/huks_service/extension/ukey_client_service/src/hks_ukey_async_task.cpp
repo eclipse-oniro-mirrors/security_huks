@@ -220,7 +220,8 @@ void HksUkeyAsyncTask::OnDone(int32_t ret)
     //   reply, so the entry is guaranteed to exist when UPDATE arrives).
     // - FINISH/ABORT: remove the handle→routingKey entry and unregister the death recipient.
     //   handleAtSubmit_ was extracted at submit time (from PARAM1_BUFFER).
-    if (msgCode_ == HKS_MSG_INIT && ret == HKS_SUCCESS && outDataRaw_ != nullptr && outSize_ >= sizeof(uint64_t)) {
+    if ((msgCode_ == HKS_MSG_INIT) && (ret == HKS_SUCCESS) && (outDataRaw_ != nullptr)
+        && (outSize_ >= sizeof(uint64_t))) {
         uint64_t handle = 0;
         (void)memcpy_s(&handle, sizeof(handle), outDataRaw_, sizeof(uint64_t));
         RegisterHandleRouting(handle, routingKey_, clientStub_);

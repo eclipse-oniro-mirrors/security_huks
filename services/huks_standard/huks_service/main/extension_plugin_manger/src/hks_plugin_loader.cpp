@@ -181,19 +181,33 @@ int32_t HuksPluginLoader::SubmitTaskExecutor(const std::string &providerName,
     std::lock_guard<std::mutex> lock(executorMutex_);
     auto it = executors_.find(providerName);
     if (it != executors_.end()) {
-        return static_cast<int32_t>(it->second->Submit(std::move(task)));
+        it->second->Start();
+        int32_t ret = static_cast<int32_t>(it->second->Submit(std::move(task)));
+        if (ret == static_cast<int32_t>(OHOS::Security::Hks::HksTaskAccept::STOPPED)) {
+            HKS_LOG_E("per-provider executor still stopped after restart, evicting, provider=%{public}s",
+                providerName.c_str());
+            executors_.erase(it);
+        }
+        return ret;
     }
-    auto newExecutor = std::make_unique<HksTaskExecutor>(HksTaskExecutor::Config{});
+    auto newExecutor = std::make_unique<Hks::HksTaskExecutor>(Hks::HksTaskExecutor::Config{});
     newExecutor->Start();
     int32_t acceptRaw = static_cast<int32_t>(newExecutor->Submit(std::move(task)));
-    HKS_LOG_I("per-provider executor created, provider=%{public}s", providerName.c_str());
-    executors_[providerName] = std::move(newExecutor);
+    if (acceptRaw == static_cast<int32_t>(OHOS::Security::Hks::HksTaskAccept::STOPPED)) {
+        // Start failed (pthread_create); do not cache the dead executor — the next
+        // Submit will create a fresh one and retry.
+        HKS_LOG_E("per-provider executor start failed, not cached, provider=%{public}s",
+            providerName.c_str());
+    } else {
+        HKS_LOG_I("per-provider executor created, provider=%{public}s", providerName.c_str());
+        executors_[providerName] = std::move(newExecutor);
+    }
     return acceptRaw;
 }
 
 int32_t HuksPluginLoader::StopExecutorForProvider(const std::string &providerName)
 {
-    // Stop+join outside libMutex: Stop() blocks until in-flight tasks finish (<=60s);
+    // Stop() blocks until in-flight tasks finish (<=60s);
     // holding libMutex during join would deadlock with AutoRefCount (worker dispatch path
     // needs libMutex). executorMutex_ is separate and safe to hold during join.
     std::unique_ptr<OHOS::Security::Hks::HksTaskExecutor> executorToStop;

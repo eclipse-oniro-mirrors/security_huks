@@ -211,15 +211,16 @@ int32_t HksUKeyGeneralPackWithCertInfo(const struct HksBlob *blob, const struct 
     return ret;
 }
 
-int32_t HksAllocInBlobWithThreeBlobsAndParamSet(struct HksBlob *inBlob, const struct HksBlob *blob1,
-    const struct HksBlob *blob2, const struct HksBlob *blob3, const struct HksParamSet *paramSet)
+int32_t HksAllocInBlobWithAbilityAndParamSet(struct HksBlob *inBlob, const struct HksBlob *resourceId,
+    const struct HksAbilityInfo *abilityInfo, const struct HksParamSet *paramSet)
 {
-    if (inBlob == NULL || blob1 == NULL || blob2 == NULL || blob3 == NULL) {
+    if (inBlob == NULL || resourceId == NULL || abilityInfo == NULL) {
         return HKS_ERROR_NULL_POINTER;
     }
-    uint32_t size = (uint32_t)(sizeof(blob1->size) + ALIGN_SIZE(blob1->size));
-    size += (uint32_t)(sizeof(blob2->size) + ALIGN_SIZE(blob2->size));
-    size += (uint32_t)(sizeof(blob3->size) + ALIGN_SIZE(blob3->size));
+    uint32_t size = (uint32_t)(sizeof(resourceId->size) + ALIGN_SIZE(resourceId->size));
+    size += (uint32_t)(sizeof(abilityInfo->bundleName.size) + ALIGN_SIZE(abilityInfo->bundleName.size));
+    size += (uint32_t)(sizeof(abilityInfo->abilityName.size) + ALIGN_SIZE(abilityInfo->abilityName.size));
+    size += (uint32_t)sizeof(uint32_t); // for abilityType
     if (paramSet != NULL) {
         size += ALIGN_SIZE(paramSet->paramSetSize);
     }
@@ -229,18 +230,20 @@ int32_t HksAllocInBlobWithThreeBlobsAndParamSet(struct HksBlob *inBlob, const st
     return HKS_SUCCESS;
 }
 
-int32_t HksBlob3ParamSetPack(const struct HksBlob *blob1, const struct HksBlob *blob2,
-    const struct HksBlob *blob3, const struct HksParamSet *paramSet, struct HksBlob *destData)
+int32_t HksAbilityAndParamSetPack(const struct HksBlob *resourceId, const struct HksAbilityInfo *abilityInfo,
+    const struct HksParamSet *paramSet, struct HksBlob *destData)
 {
     uint32_t offset = 0;
     int32_t ret;
     do {
-        ret = CopyBlobToBuffer(blob1, destData, &offset);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob1 failed");
-        ret = CopyBlobToBuffer(blob2, destData, &offset);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob2 failed");
-        ret = CopyBlobToBuffer(blob3, destData, &offset);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy blob3 failed");
+        ret = CopyBlobToBuffer(resourceId, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy resourceId failed");
+        ret = CopyBlobToBuffer(&abilityInfo->bundleName, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy bundleName failed");
+        ret = CopyBlobToBuffer(&abilityInfo->abilityName, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy abilityName failed");
+        ret = CopyUint32ToBuffer((uint32_t)abilityInfo->abilityType, destData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy abilityType failed");
         if (paramSet != NULL) {
             ret = CopyParamSetToBuffer(paramSet, destData, &offset);
             HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy paramSet failed");

@@ -286,12 +286,10 @@ int32_t HksClientQueryAbilityInfo(struct HksBlob *resourceId, const struct HksPa
         ret = HksCheckBlob3(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "Invalid input data, check blobl3 fail, ret = %" LOG_PUBLIC "d", ret)
 
-        ret = HksAllocInBlobWithThreeBlobsAndParamSet(&inBlob, resourceId, &abilityInfo->bundleName,
-            &abilityInfo->abilityName, paramSetIn);
+        ret = HksAllocInBlobWithAbilityAndParamSet(&inBlob, resourceId, abilityInfo, paramSetIn);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "alloc inBlob fail")
 
-        ret = HksBlob3ParamSetPack(resourceId, &abilityInfo->bundleName, &abilityInfo->abilityName,
-            paramSetIn, &inBlob);
+        ret = HksAbilityAndParamSetPack(resourceId, abilityInfo, paramSetIn, &inBlob);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksQueryAbilityInfo pack fail")
 
         ret = HksSendRequest(HKS_MSG_EXT_QUERY_ABILITY_INFO, &inBlob, &outBlob, paramSetIn);
