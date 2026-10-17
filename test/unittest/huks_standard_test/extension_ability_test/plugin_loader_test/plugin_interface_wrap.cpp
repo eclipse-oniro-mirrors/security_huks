@@ -298,6 +298,21 @@ ENABLE_CFI(__attribute__((visibility("default"))) int32_t Fake_HksExtPluginOnQue
     return 0;
 }
 
+extern "C" int32_t Fake_HksExtPluginStartTaskExecutorC()
+{
+    return HKS_SUCCESS;
+}
+
+extern "C" int32_t Fake_HksExtPluginStopTaskExecutorC()
+{
+    return HKS_SUCCESS;
+}
+
+extern "C" void *Fake_HksExtPluginGetTaskExecutorC()
+{
+    return nullptr;
+}
+
 extern "C" void *__wrap_dlopen(const char* filename, int flags)
 {
     static int fakeHandle = 1;
@@ -376,6 +391,9 @@ extern "C" void *__wrap_dlsym(void* handle, const char* symbol)
          {"_ZN4OHOS8Security4Huks36HksExtPluginOnSetOrGetRemotePropertyER23HksProcessWithErrorInfo"
          "23HksExtPropertyOperationRKNSt3__h12basic_stringIcNS5_11char_traitsIcEENS5_9allocatorIcEEEESD_R11CppParamSet",
          (void*)Fake_HksExtPluginOnSetOrGetRemoteProperty},
+         {"HksExtPluginStartTaskExecutorC", (void*)Fake_HksExtPluginStartTaskExecutorC},
+         {"HksExtPluginStopTaskExecutorC", (void*)Fake_HksExtPluginStopTaskExecutorC},
+         {"HksExtPluginGetTaskExecutorC", (void*)Fake_HksExtPluginGetTaskExecutorC},
     };
 
     for (auto &item : kFakeSymbols) {
@@ -384,8 +402,7 @@ extern "C" void *__wrap_dlsym(void* handle, const char* symbol)
         }
     }
 
-    void *real_sym = dlsym(handle, symbol);
-    return real_sym;
+    return nullptr;
 }
 
 }
