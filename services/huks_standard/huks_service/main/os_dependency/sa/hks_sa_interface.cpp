@@ -279,7 +279,7 @@ auto HksExtStub::WaitForAsyncReply(int timeout)
     HKS_LOG_I("begin wait for async reply");
     if (mCv.wait_for(lck, std::chrono::seconds(timeout)) == std::cv_status::timeout) {
         HKS_LOG_E("WaitForAsyncReply timeout! %" LOG_PUBLIC "u seconds", timeout);
-        return {HKS_ERROR_BAD_STATE, nullptr, 0, 0, nullptr};
+        return {HUKS_ERR_CODE_BUSY, nullptr, 0, 0, nullptr};
     }
     struct HksExternalErrorInfo *errInfo = mErrInfo;
     mErrInfo = nullptr;
