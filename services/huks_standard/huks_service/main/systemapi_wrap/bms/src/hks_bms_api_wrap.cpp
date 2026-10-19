@@ -52,6 +52,9 @@
 #define APP_MODE_DEBUG "debug"
 #define APP_MODE_RELEASE "release"
 const int32_t HKS_MAIN_APPLICATION = 0;
+const uint32_t HKS_HEX_CHARS_PER_BYTE = 2;
+const uint32_t HKS_HEX_NIBBLE_BITS = 4;
+const uint32_t HKS_HEX_NIBBLE_MASK = 0x0F;
 
 using namespace OHOS;
 using namespace Security::AccessToken;
@@ -432,11 +435,11 @@ int32_t HksGetAncoAttestApplicationId(uint32_t uid, int32_t userId,
     // convert signature to hex string
     std::string sigHex;
     if (signature != NULL && signature->data != NULL && signature->size > 0) {
-        sigHex.reserve(signature->size * 2);
+        sigHex.reserve(signature->size * HKS_HEX_CHARS_PER_BYTE);
         static const char hexChars[] = "0123456789abcdef";
         for (uint32_t i = 0; i < signature->size; i++) {
-            sigHex.push_back(hexChars[(signature->data[i] >> 4) & 0x0F]);
-            sigHex.push_back(hexChars[signature->data[i] & 0x0F]);
+            sigHex.push_back(hexChars[(signature->data[i] >> HKS_HEX_NIBBLE_BITS) & HKS_HEX_NIBBLE_MASK]);
+            sigHex.push_back(hexChars[signature->data[i] & HKS_HEX_NIBBLE_MASK]);
         }
     }
     HKS_LOG_I("AncoAppId bundle=%{public}s ver=%{public}llu sigLen=%{public}u sigHexLen=%{public}zu",
@@ -449,7 +452,11 @@ int32_t HksGetAncoAttestApplicationId(uint32_t uid, int32_t userId,
     outAppId->data = static_cast<uint8_t *>(HksMalloc(outAppId->size));
     HKS_IF_NULL_LOGE_RETURN(outAppId->data, HKS_ERROR_MALLOC_FAIL, "malloc AncoAppId fail")
 
-    (void)memcpy_s(outAppId->data, outAppId->size, appIdStr.c_str(), appIdStr.size());
+    if (memcpy_s(outAppId->data, outAppId->size, appIdStr.c_str(), appIdStr.size()) != EOK) {
+        HKS_LOG_E("HksGetAncoAttestApplicationId: copy appId failed");
+        HKS_FREE_BLOB(*outAppId);
+        return HKS_ERROR_INSUFFICIENT_MEMORY;
+    }
     return HKS_SUCCESS;
 }
 #endif

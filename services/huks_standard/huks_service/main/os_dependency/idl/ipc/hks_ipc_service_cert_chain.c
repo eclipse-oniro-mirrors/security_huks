@@ -52,8 +52,16 @@ static struct HksBlob BuildKeyAliasFromCertChain(const struct HksBlob *certAlias
     if (result.data == NULL) {
         return result;
     }
-    (void)memcpy_s(result.data, totalLen, HKS_PREFIX_USRPKEY, keyPrefixLen);
-    (void)memcpy_s(result.data + keyPrefixLen, bodyLen, certAlias->data + certPrefixLen, bodyLen);
+    if (memcpy_s(result.data, totalLen, HKS_PREFIX_USRPKEY, keyPrefixLen) != EOK) {
+        HKS_LOG_E("BuildKeyAliasFromCertChain: copy key prefix failed");
+        HKS_FREE_BLOB(result);
+        return result;
+    }
+    if (memcpy_s(result.data + keyPrefixLen, bodyLen, certAlias->data + certPrefixLen, bodyLen) != EOK) {
+        HKS_LOG_E("BuildKeyAliasFromCertChain: copy alias body failed");
+        HKS_FREE_BLOB(result);
+        return result;
+    }
     result.size = totalLen;
     return result;
 }

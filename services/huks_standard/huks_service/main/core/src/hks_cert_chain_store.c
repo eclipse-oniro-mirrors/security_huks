@@ -80,7 +80,11 @@ static struct HksBlob BuildCertChainAlias(const struct HksBlob *keyAlias)
         if (result.data == NULL) {
             return result;
         }
-        (void)memcpy_s(result.data, keyAlias->size, keyAlias->data, keyAlias->size);
+        if (memcpy_s(result.data, keyAlias->size, keyAlias->data, keyAlias->size) != EOK) {
+            HKS_LOG_E("BuildCertChainAlias: copy cert alias failed");
+            HKS_FREE_BLOB(result);
+            return result;
+        }
         result.size = keyAlias->size;
         return result;
     }
@@ -106,8 +110,16 @@ static struct HksBlob BuildCertChainAlias(const struct HksBlob *keyAlias)
     if (result.data == NULL) {
         return result;
     }
-    (void)memcpy_s(result.data, totalLen, HKS_PREFIX_CERTCHAIN, certPrefixLen);
-    (void)memcpy_s(result.data + certPrefixLen, bodyLen, keyAlias->data + plen, bodyLen);
+    if (memcpy_s(result.data, totalLen, HKS_PREFIX_CERTCHAIN, certPrefixLen) != EOK) {
+        HKS_LOG_E("BuildCertChainAlias: copy cert chain prefix failed");
+        HKS_FREE_BLOB(result);
+        return result;
+    }
+    if (memcpy_s(result.data + certPrefixLen, bodyLen, keyAlias->data + plen, bodyLen) != EOK) {
+        HKS_LOG_E("BuildCertChainAlias: copy key alias body failed");
+        HKS_FREE_BLOB(result);
+        return result;
+    }
     result.size = totalLen;
     return result;
 }
@@ -137,7 +149,8 @@ static int32_t BuildFileName(char *fileName, uint32_t bufLen, uint32_t uid, cons
     if (usedLen + keyAlias->size + 1 > bufLen) {
         return HKS_ERROR_INVALID_ARGUMENT;
     }
-    (void)memcpy_s(fileName + usedLen, bufLen - usedLen, keyAlias->data, keyAlias->size);
+    HKS_IF_NOT_EOK_LOGE_RETURN(memcpy_s(fileName + usedLen, bufLen - usedLen, keyAlias->data, keyAlias->size),
+        HKS_ERROR_INTERNAL_ERROR, "copy keyAlias to fileName failed")
     fileName[usedLen + keyAlias->size] = '\0';
     return HKS_SUCCESS;
 }

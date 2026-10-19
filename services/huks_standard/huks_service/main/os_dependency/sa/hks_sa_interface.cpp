@@ -429,7 +429,11 @@ int32_t HksWaitAnonAttestReply(const uint8_t *stubObj, uint32_t timeoutSec, stru
     if (outCert->data == nullptr) {
         return HKS_ERROR_MALLOC_FAIL;
     }
-    (void)memcpy_s(outCert->data, certSize, certData.get(), certSize);
+    if (memcpy_s(outCert->data, certSize, certData.get(), certSize) != EOK) {
+        HKS_LOG_E("HksWaitAnonAttestReply: copy cert data failed");
+        HKS_FREE_BLOB(*outCert);
+        return HKS_ERROR_INSUFFICIENT_MEMORY;
+    }
     outCert->size = certSize;
     HKS_LOG_I("HksWaitAnonAttestReply: got cert size=%" LOG_PUBLIC "u", certSize);
     return HKS_SUCCESS;

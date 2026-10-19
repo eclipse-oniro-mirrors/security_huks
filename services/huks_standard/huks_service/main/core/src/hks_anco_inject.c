@@ -71,7 +71,8 @@ static int32_t ReadAncoApkUid(const struct HksParamSet *paramSet, uint32_t *outA
         return HKS_ERROR_INVALID_ARGUMENT;
     }
     uint32_t apkUid = 0;
-    (void)memcpy_s(&apkUid, sizeof(uint32_t), ancoUidParam->blob.data, ancoUidParam->blob.size);
+    HKS_IF_NOT_EOK_LOGE_RETURN(memcpy_s(&apkUid, sizeof(uint32_t), ancoUidParam->blob.data, ancoUidParam->blob.size),
+        HKS_ERROR_INVALID_ARGUMENT, "memcpy ANCO_APP_UID failed")
     HKS_LOG_I("InjectAncoAttestApplicationId read ANCO_APP_UID apkUid=%{public}u", apkUid);
     *outApkUid = apkUid;
     return HKS_SUCCESS;
