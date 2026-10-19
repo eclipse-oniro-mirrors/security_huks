@@ -124,6 +124,9 @@ int32_t HksDecapsulateUnpack(const struct HksBlob *srcData, struct HksBlob *shar
 
 int32_t HksEncapsulateResponsePack(struct HksEncapsulationResult *encapResult, struct HksBlob *responseBlob);
 
+int32_t HksSetStorageUnpack(const struct HksBlob *srcData, struct HksBlob *keyAlias,
+    struct HksParamSet **paramSet, struct HksBlob *data);
+
 int32_t CopyBlobToBufferForEmptyData(const struct HksBlob *blob, struct HksBlob *destBlob, uint32_t *destOffset);
 #ifdef __cplusplus
 }

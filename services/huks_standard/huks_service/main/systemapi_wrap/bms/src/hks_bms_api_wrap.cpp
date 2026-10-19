@@ -416,4 +416,40 @@ int32_t HksGetBundleNameFromUid(uint32_t uid, std::string &bundleName)
 
     return HKS_SUCCESS;
 }
+
+// build ATTESTATION_APPLICATION_ID
+// format: "bundleName|versionCode|signature" (pipe-separated)
+int32_t HksGetAncoAttestApplicationId(uint32_t uid, int32_t userId,
+    uint64_t versionCode, const struct HksBlob *signature, struct HksBlob *outAppId)
+{
+    (void)userId;
+    HKS_IF_NULL_LOGE_RETURN(outAppId, HKS_ERROR_NULL_POINTER, "outAppId is nullptr.")
+
+    std::string bundleName;
+    int32_t ret = HksGetBundleNameFromUid(uid, bundleName);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "HksGetAncoAttestApplicationId get bundleName failed uid=%u", uid)
+
+    // convert signature to hex string
+    std::string sigHex;
+    if (signature != NULL && signature->data != NULL && signature->size > 0) {
+        sigHex.reserve(signature->size * 2);
+        static const char hexChars[] = "0123456789abcdef";
+        for (uint32_t i = 0; i < signature->size; i++) {
+            sigHex.push_back(hexChars[(signature->data[i] >> 4) & 0x0F]);
+            sigHex.push_back(hexChars[signature->data[i] & 0x0F]);
+        }
+    }
+    HKS_LOG_I("AncoAppId bundle=%{public}s ver=%{public}llu sigLen=%{public}u sigHexLen=%{public}zu",
+        bundleName.c_str(), (unsigned long long)versionCode,
+        (signature != NULL) ? signature->size : 0, sigHex.size());
+
+    // assemble "bundleName|versionCode|signature"
+    std::string appIdStr = bundleName + "|" + std::to_string(versionCode) + "|" + sigHex;
+    outAppId->size = appIdStr.size();
+    outAppId->data = static_cast<uint8_t *>(HksMalloc(outAppId->size));
+    HKS_IF_NULL_LOGE_RETURN(outAppId->data, HKS_ERROR_MALLOC_FAIL, "malloc AncoAppId fail")
+
+    (void)memcpy_s(outAppId->data, outAppId->size, appIdStr.c_str(), appIdStr.size());
+    return HKS_SUCCESS;
+}
 #endif
