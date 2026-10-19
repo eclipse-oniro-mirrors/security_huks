@@ -32,6 +32,20 @@ extern "C" {
 int32_t HksSendRequest(enum HksIpcInterfaceCode type, const struct HksBlob *inBlob, struct HksBlob *outBlob,
     const struct HksParamSet *paramSet);
 
+/*
+ * HksSendAnonAttestRequestWithCallback - Send an anonymous attestation request and register a
+ * callback for the async reply. Only the admission reply is waited for (synchronous part of the
+ * IPC round trip); the attestation result itself is delivered later by invoking the callback
+ * from HksAsyncStub::OnRemoteRequest when the service calls SendAsyncReply.
+ * @inBlob:      the input serialized data blob, same layout as the sync anon attest request.
+ * @outBlob:     the output blob only used to carry the admission reply (no cert data).
+ * @paramSet:    the parameter set, used to read HKS_TAG_ATTESTATION_BASE64 for reply unpacking.
+ * @callback:    result callback, invoked exactly once iff this function returns HKS_SUCCESS.
+ * @userData:    caller context pointer, passed through to the callback as-is.
+ */
+int32_t HksSendAnonAttestRequestWithCallback(const struct HksBlob *inBlob, struct HksBlob *outBlob,
+    const struct HksParamSet *paramSet, HksAsyncAnonAttestCallback callback, void *userData);
+
 #ifdef __cplusplus
 }
 #endif

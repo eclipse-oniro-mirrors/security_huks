@@ -16,8 +16,10 @@
 #include "native_huks_api.h"
 #include "hks_param.h"
 #include "hks_api.h"
+#include "hks_cfi.h"
 #include "hks_errcode_adapter.h"
 #include "hks_error_code.h"
+#include "hks_log.h"
 #include "stdlib.h"
 
 typedef int32_t (*HksAttestFunc)(const struct HksBlob *, const struct HksParamSet *, struct HksCertChain *);
@@ -169,6 +171,91 @@ struct OH_Huks_Result OH_Huks_AnonAttestKeyItem(const struct OH_Huks_Blob *keyAl
 {
     int32_t result = HuksAttestAdapter(keyAlias, paramSet, certChain, HksAnonAttestKey);
     return ConvertApiResult(result);
+}
+
+/* bridge between the InnerAPI callback (HKS error codes + HksCertChain) and the C API callback
+ * (OH_Huks error codes + OH_Huks_CertChain); one heap instance per request, released inside
+ * the trampoline once it fires */
+struct HuksAsyncAnonAttestCtx {
+    OH_Huks_AsyncAnonAttestCallback userCallback;
+    void *userData;
+};
+
+/* the user callback lives in non-CFI-instrumented code (app or test), so the indirect call
+ * below must skip the cfi check - same treatment as the dlsym'd DCM entry points */
+ENABLE_CFI(static void HuksAsyncAnonAttestTrampoline(void *userData, int32_t result,
+    const struct HksCertChain *certChain))
+{
+    struct HuksAsyncAnonAttestCtx *ctx = (struct HuksAsyncAnonAttestCtx *)userData;
+    if (ctx == NULL) {
+        return;
+    }
+    OH_Huks_AsyncAnonAttestCallback callback = ctx->userCallback;
+    void *cbUserData = ctx->userData;
+    free(ctx);
+    struct OH_Huks_Result apiResult = ConvertApiResult(result);
+    if (apiResult.errorCode != OH_HUKS_SUCCESS) {
+        /* raw hilog instead of HKS_LOG_E: the latter also calls HksLog, which is not exported
+         * by libhukssdk and therefore not linkable from this library */
+        HILOG_ERROR(LOG_ENGINE, "%" LOG_PUBLIC "s: async anon attest result = %" LOG_PUBLIC "d\n",
+            __func__, apiResult.errorCode);
+    }
+    if (callback != NULL) {
+        callback(cbUserData, apiResult.errorCode, (const struct OH_Huks_CertChain *)certChain);
+    }
+}
+
+struct OH_Huks_Result OH_Huks_AsyncAnonAttestKeyItem(const struct OH_Huks_Blob *keyAlias,
+    const struct OH_Huks_ParamSet *paramSet, OH_Huks_AsyncAnonAttestCallback callback,
+    void *userData)
+{
+    if (callback == NULL) {
+        return ConvertApiResult(HKS_ERROR_NULL_POINTER);
+    }
+    struct HuksAsyncAnonAttestCtx *ctx = (struct HuksAsyncAnonAttestCtx *)malloc(sizeof(*ctx));
+    if (ctx == NULL) {
+        return ConvertApiResult(HKS_ERROR_MALLOC_FAIL);
+    }
+    ctx->userCallback = callback;
+    ctx->userData = userData;
+
+    int32_t ret;
+    struct HksParamSet *newParamSet = NULL;
+    do {
+        if (paramSet == NULL) {
+            ret = HKS_ERROR_NULL_POINTER;
+            break;
+        }
+        ret = HksCheckParamSet((struct HksParamSet *)paramSet, paramSet->paramSetSize);
+        if (ret != HKS_SUCCESS) {
+            break;
+        }
+        ret = HksInitParamSet(&newParamSet);
+        if (ret != HKS_SUCCESS) {
+            break;
+        }
+        ret = HksAddParams(newParamSet, (const struct HksParam *)paramSet->params, paramSet->paramsCnt);
+        if (ret != HKS_SUCCESS) {
+            break;
+        }
+        struct HksParam isBase64Param = { .tag = HKS_TAG_ATTESTATION_BASE64, .boolParam = true };
+        ret = HksAddParams(newParamSet, &isBase64Param, 1);
+        if (ret != HKS_SUCCESS) {
+            break;
+        }
+        ret = HksBuildParamSet(&newParamSet);
+        if (ret != HKS_SUCCESS) {
+            break;
+        }
+        ret = HksAsyncAnonAttestKey((const struct HksBlob *)keyAlias, newParamSet,
+            HuksAsyncAnonAttestTrampoline, ctx);
+    } while (0);
+    HksFreeParamSet(&newParamSet);
+    if (ret != HKS_SUCCESS) {
+        /* the request was not admitted: the trampoline will never run, release the ctx here */
+        free(ctx);
+    }
+    return ConvertApiResult(ret);
 }
 
 struct OH_Huks_Result OH_Huks_InitSession(const struct OH_Huks_Blob *keyAlias,

@@ -21,6 +21,7 @@ ohos_unittest("hukssdk_test") {
   sources = [
     "./src/hks_aes_test.cpp",
     "./src/hks_agreement_test.cpp",
+    "./src/hks_async_anon_attest_key_test.cpp",
     "./src/hks_bn_exp_mod_test.cpp",
     "./src/hks_cipher_test.cpp",
     "./src/hks_curve25519_test.cpp",
@@ -35,8 +36,9 @@ ohos_unittest("hukssdk_test") {
 
     # "./src/hks_modify_key_test.cpp",
     "./src/hks_others_test.cpp",
-    "./src/hks_wrap_key_test.cpp",
     "./src/hks_ukey_extension_crypto_test.cpp",
+    "./src/hks_wrap_key_test.cpp",
+
     #"./src/hks_se_test.cpp",
 
     # "./src/hks_safe_cipher_key_test.cpp",
@@ -49,6 +51,7 @@ ohos_unittest("hukssdk_test") {
     "./src/hks_test_curve25519.c",
     "./src/hks_test_file_operator.c",
     "./src/hks_test_mem.c",
+    "//base/security/huks/test/unittest/huks_common_test/hks_mock_common/hks_mock_common.cpp",
     "//base/security/huks/test/unittest/huks_common_test/src/hks_bn_exp_mod_test_func.cpp",
     "//base/security/huks/test/unittest/huks_common_test/src/hks_modify_key_test_func.cpp",
     "//base/security/huks/test/unittest/huks_common_test/src/hks_test_adapt_for_de.c",
@@ -62,7 +65,6 @@ ohos_unittest("hukssdk_test") {
     "//base/security/huks/test/unittest/huks_standard_test/module_test/interface_test/src/hks_list_aliases_test.cpp",
     "//base/security/huks/test/unittest/huks_standard_test/module_test/interface_test/src/hks_native_api_compatibility_test.cpp",
     "//base/security/huks/test/unittest/huks_standard_test/module_test/interface_test/src/hks_refresh_key_info_test.cpp",
-    "//base/security/huks/test/unittest/huks_common_test/hks_mock_common/hks_mock_common.cpp"
   ]
   if (huks_security_level == "software") {
     defines = [ "HKS_UNTRUSTED_RUNNING_ENV" ]
@@ -88,15 +90,15 @@ ohos_unittest("hukssdk_test") {
     "//base/security/huks/interfaces/kits/c:huks_ndk",
   ]
   external_deps = [
+    "access_token:libaccesstoken_sdk",
+    "access_token:libnativetoken_shared",
+    "access_token:libtokenid_sdk",
+    "access_token:libtokensetproc_shared",
     "bounds_checking_function:libsec_shared",
     "c_utils:utils",
     "hilog:libhilog",
     "ipc:ipc_single",
     "os_account:os_account_innerkits",
-    "access_token:libaccesstoken_sdk",
-    "access_token:libnativetoken_shared",
-    "access_token:libtokenid_sdk",
-    "access_token:libtokensetproc_shared",
   ]
 
   if (os_level == "standard") {

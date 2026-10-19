@@ -351,6 +351,16 @@ int32_t HksClientAttestKey(const struct HksBlob *keyAlias, const struct HksParam
     return HKS_ERROR_NOT_SUPPORTED;
 }
 
+int32_t HksClientAsyncAnonAttestKey(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
+    HksAsyncAnonAttestCallback callback, void *userData)
+{
+    (void)keyAlias;
+    (void)paramSet;
+    (void)callback;
+    (void)userData;
+    return HKS_ERROR_NOT_SUPPORTED;
+}
+
 int32_t HksClientInit(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
     struct HksBlob *handle, struct HksBlob *token)
 {

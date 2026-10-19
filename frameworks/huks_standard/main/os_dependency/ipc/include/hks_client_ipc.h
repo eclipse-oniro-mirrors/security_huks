@@ -104,6 +104,9 @@ int32_t HksClientGetKeyInfoList(const struct HksParamSet *paramSet, struct HksKe
 int32_t HksClientAttestKey(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
     struct HksCertChain *certChain, bool needAnonCertChain);
 
+int32_t HksClientAsyncAnonAttestKey(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
+    HksAsyncAnonAttestCallback callback, void *userData);
+
 int32_t HksClientInit(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet, struct HksBlob *handle,
     struct HksBlob *token);
 

@@ -400,6 +400,22 @@ HKS_API_EXPORT int32_t HksAnonAttestKeyOffline(const struct HksBlob *keyAlias,
     const struct HksParamSet *paramSet, struct HksCertChain *certChain);
 
 /**
+ * @brief Async Anonymous Attest key. The call returns immediately after the request is
+ *        admitted by the service; the attestation result (error code + cert chain) is
+ *        delivered asynchronously via the callback. The cert chain passed to the callback
+ *        is allocated by HUKS and only valid during the callback.
+ * @param keyAlias key alias
+ * @param paramSet required parameter set
+ * @param callback result callback, must not be NULL. It is invoked exactly once if and
+ *        only if this function returns HKS_SUCCESS
+ * @param userData caller context pointer, passed through to the callback as-is
+ * @return HKS_SUCCESS if the request has been admitted (the callback will be invoked once
+ *         with the final result); otherwise the admit error and the callback is NOT invoked
+ */
+HKS_API_EXPORT int32_t HksAsyncAnonAttestKey(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, HksAsyncAnonAttestCallback callback, void *userData);
+
+/**
  * @brief Get certificate chain
  * @param keyAlias key alias
  * @param paramSet required parameter set

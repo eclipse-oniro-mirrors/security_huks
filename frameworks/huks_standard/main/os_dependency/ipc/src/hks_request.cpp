@@ -20,6 +20,7 @@
 #include <message_option.h>
 #include <securec.h>
 
+#include "hks_async_stub.h"
 #include "hks_base_check.h" // for HksAttestIsAnonymous
 #include "hks_log.h"
 #include "hks_param.h"
@@ -260,7 +261,10 @@ static int32_t HksSendAnonAttestRequestAndWaitAsyncReply(MessageParcel &data,
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret,
         "HksSendAnonAttestRequestAndWaitAsyncReply HksReadRequestReply failed %" LOG_PUBLIC "d", ret)
 
-#ifndef HKS_UNTRUSTED_RUNNING_ENV
+    /* The admission reply never carries the chain (both software-level and TEE services
+     * deliver it through the stub's async reply), so always wait for it here: on software
+     * the reply is already on its way when the admission arrives, on TEE it comes from the
+     * DCM networking. One identical client flow for every service-side security level. */
     int timeout = 10; // seconds
     auto [errCode, packedCerts, packedSize] = hksCallback->WaitForAsyncReply(timeout);
     if (errCode != HKS_SUCCESS) {
@@ -283,10 +287,6 @@ static int32_t HksSendAnonAttestRequestAndWaitAsyncReply(MessageParcel &data,
         outBlob->size, packedSize)
     outBlob->size = packedSize;
     return HKS_SUCCESS;
-#else
-    (void)(hksCallback);
-    return ret;
-#endif
 }
 
 static int32_t SendAttestKeyAsyncMessage(MessageParcel &data,
@@ -452,4 +452,52 @@ int32_t HksSendRequest(enum HksIpcInterfaceCode type, const struct HksBlob *inBl
     int32_t errorCode = proxy->SendRequest(type, data, reply, option);
     HKS_IF_TRUE_LOGE_RETURN(errorCode != 0, HKS_ERROR_IPC_MSG_FAIL, "SendRequest failed %" LOG_PUBLIC "d", errorCode);
     return HksReadRequestReply(reply, outBlob);
+}
+
+int32_t HksSendAnonAttestRequestWithCallback(const struct HksBlob *inBlob, struct HksBlob *outBlob,
+    const struct HksParamSet *paramSet, HksAsyncAnonAttestCallback callback, void *userData)
+{
+#ifdef L2_STANDARD
+    HksClearThreadErrorMsg();
+#endif
+    MessageParcel data{};
+    int32_t ret = WriteCommonRequestData(data, inBlob, outBlob);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "WriteCommonRequestData failed %" LOG_PUBLIC "d", ret);
+
+    sptr<IRemoteObject> proxy = GetHksProxy();
+    HKS_IF_NULL_LOGE_RETURN(proxy, HKS_ERROR_BAD_STATE, "GetHksProxy null");
+
+    bool needBase64 = false;
+    struct HksParam *base64Param = nullptr;
+    if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_BASE64, &base64Param) == HKS_SUCCESS) {
+        needBase64 = base64Param->boolParam;
+    }
+
+    // The stub directly holds (callback, userData); after WriteRemoteObject the IPC framework
+    // keeps a strong reference, so the object outlives this function and is released
+    // automatically once the service side drops its proxy (after SendAsyncReply).
+    auto hksCallback = sptr<Security::Hks::HksAsyncStub>(
+        new (std::nothrow) Security::Hks::HksAsyncStub(callback, userData, needBase64));
+    HKS_IF_NULL_LOGE_RETURN(hksCallback, HKS_ERROR_INSUFFICIENT_MEMORY, "new HksAsyncStub failed");
+    HKS_IF_NOT_TRUE_LOGE_RETURN(data.WriteRemoteObject(hksCallback), HKS_ERROR_IPC_MSG_FAIL,
+        "WriteRemoteObject fail");
+
+    // Only the admission reply is waited for here (TF_SYNC round trip); the attestation
+    // result itself is never blocked on. It is always delivered through the stub: the
+    // service-side software path sends the async reply while handling the admission
+    // (the engine attests inline), the TEE path sends it once the DCM networking
+    // completes. In both cases HksAsyncStub::OnRemoteRequest dispatches the callback on
+    // the IPC thread - which may even run before this function returns - and the client
+    // never has to tell the two environments apart.
+    MessageParcel reply{};
+    MessageOption option = MessageOption::TF_SYNC;
+    int error = proxy->SendRequest(HKS_MSG_ATTEST_KEY_ASYNC_REPLY, data, reply, option);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(error, HKS_ERROR_IPC_MSG_FAIL,
+        "async anon attest SendRequest failed %" LOG_PUBLIC "d", error);
+
+    ret = HksReadRequestReply(reply, outBlob);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "async anon attest admit failed %" LOG_PUBLIC "d", ret)
+
+    HKS_LOG_I("async anon attest request admitted");
+    return HKS_SUCCESS;
 }

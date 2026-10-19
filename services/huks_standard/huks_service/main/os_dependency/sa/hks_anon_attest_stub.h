@@ -31,6 +31,14 @@ extern "C" {
 const uint8_t *HksCreateAnonAttestStub(void);
 int32_t HksWaitAnonAttestReply(const uint8_t *stubObj, uint32_t timeoutSec, struct HksBlob *outCert);
 void HksDestroyAnonAttestStub(const uint8_t *stubObj);
+/* Deliver an anonymous attestation result (error code + packed cert chain) to the
+ * caller's stub object through the HKS_MSG_ATTEST_KEY_ASYNC_REPLY channel - the same
+ * wire path the TEE/DCM callback delivery uses. certChain is only read when result is
+ * HKS_SUCCESS. Lets the software-level attestation path (which completes inline, with
+ * no DCM networking) publish its result through the stub as well, so every client sees
+ * one identical delivery flow: admission first, result through the callback object. */
+int32_t HksSendAnonAttestResultToCaller(const uint8_t *stubObj, int32_t result,
+    const struct HksBlob *certChain);
 
 #ifdef __cplusplus
 }

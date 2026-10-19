@@ -37,6 +37,7 @@
     HksAttestKey;
     HksAnonAttestKey;
     HksAnonAttestKeyOffline;
+    HksAsyncAnonAttestKey;
     HksGetCertificateChain;
     HksWrapKey;
     HksUnwrapKey;

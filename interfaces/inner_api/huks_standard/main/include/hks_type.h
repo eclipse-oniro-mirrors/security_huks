@@ -104,6 +104,14 @@ struct HksCertChain {
 };
 
 /**
+ * @brief callback for async anonymous attestation. the certChain is allocated by HUKS and
+ *        only valid during the callback; HUKS frees it after the callback returns. the
+ *        caller should copy the data if it needs to be kept.
+ */
+typedef void (*HksAsyncAnonAttestCallback)(void *userData, int32_t result,
+    const struct HksCertChain *certChain);
+
+/**
  * @brief hks key info
  */
 struct HksKeyInfo {

@@ -300,6 +300,69 @@ struct OH_Huks_Result OH_Huks_AnonAttestKeyItem(const struct OH_Huks_Blob *keyAl
     const struct OH_Huks_ParamSet *paramSet, struct OH_Huks_CertChain *certChain);
 
 /**
+ * @brief Defines the callback invoked asynchronously with the result of OH_Huks_AsyncAnonAttestKeyItem.
+ *
+ * @param userData [in] User data passed by the caller of OH_Huks_AsyncAnonAttestKeyItem. The value is
+ *     passed through to the callback as-is so that the caller can distinguish concurrent requests. HUKS
+ *     never interprets, modifies, or frees it, and the caller must guarantee its validity until the
+ *     callback is invoked. It can be NULL.
+ * @param result [in] Attestation result error code, with the same value range as
+ *     {@link OH_Huks_Result#errorCode} of OH_Huks_AnonAttestKeyItem. The value 0 indicates success.
+ * @param certChain [in] Certificate chain obtained. It is allocated by HUKS and is valid only during the
+ *     execution of the callback; HUKS releases it after the callback returns. The caller shall copy the
+ *     data if it needs to be kept after the callback.
+ * @since 26.0.1
+ */
+typedef void (*OH_Huks_AsyncAnonAttestCallback)(void *userData, int32_t result,
+    const struct OH_Huks_CertChain *certChain);
+
+/**
+ * @brief Obtains the anonymous attestation certificate chain asynchronously.
+ *
+ * The interface returns once the request has been admitted, so the calling thread is never blocked on the
+ * networking of the attestation service, and the attestation result (error code + certificate chain) is
+ * delivered later by invoking the callback. If a non-zero error code is returned, the request is not
+ * admitted and the callback will not be invoked. When the complete certificate chain is already available
+ * at admission (software-level environments attest without networking), the callback may be invoked before
+ * this interface returns.
+ *
+ * @param keyAlias [in] Pointer to the alias of the target key.
+ * @param paramSet [in] Pointer to the parameter set required for obtaining the key certificate, which is
+ *     the same as that of OH_Huks_AnonAttestKeyItem.
+ * @param callback [in] Result callback. It cannot be NULL, and is invoked exactly once if and only if
+ *     this interface returns OH_HUKS_SUCCESS.
+ * @param userData [in] User data passed through to the callback as-is. HUKS never interprets, modifies,
+ *     or frees it, and the caller must guarantee its validity until the callback is invoked. It can be NULL.
+ * @return <ul>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_SUCCESS} 0 - If the request has been admitted, the callback
+ *             will be invoked once with the final result.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_FEATURE_NOT_SUPPORTED} 12000001 - If this feature
+ *             is not supported currently.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_MISSING_CRYPTO_ALG_ARGUMENT} 12000002 - If failed
+ *             to obtain the key parameter.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_INVALID_CRYPTO_ALG_ARGUMENT} 12000003 - If the
+ *             key parameter is invalid.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_COMMUNICATION_FAIL} 12000005 - If IPC communication
+ *             failed.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_CRYPTO_FAIL} 12000006 - If the encryption engine
+ *             fails.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_ITEM_NOT_EXIST} 12000011 - If the key file does not
+ *             exist.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_INTERNAL_ERROR} 12000012 - If a system error
+ *             occurred.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_INSUFFICIENT_MEMORY} 12000014 - If the memory is
+ *             insufficient.</li>
+ *         <li>{@link OH_Huks_ErrCode#OH_HUKS_ERR_CODE_INVALID_ARGUMENT} 12000018 - If the group name
+ *             specified by accessing the group tag is invalid. (This error code is added in API
+ *             version 23.)</li>
+ *         </ul>
+ * @since 26.0.1
+ */
+struct OH_Huks_Result OH_Huks_AsyncAnonAttestKeyItem(const struct OH_Huks_Blob *keyAlias,
+    const struct OH_Huks_ParamSet *paramSet, OH_Huks_AsyncAnonAttestCallback callback,
+    void *userData);
+
+/**
  * @brief Initializes the key session interface and obtains a handle (mandatory) and challenge value (optional).
  *
  * @param keyAlias Indicates the pointer to the alias of the target key.
