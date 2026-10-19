@@ -1357,12 +1357,13 @@ static int32_t AddAppInfoAndModelToParamSet(const struct HksProcessInfo *process
     int32_t ret;
     struct HksBlob appInfo = { 0, NULL };
     struct HksParamSet *newParamSet = NULL;
+    bool isAncoBroker = false;
 
     do {
 #ifdef HKS_SUPPORT_GET_BUNDLE_INFO
         // check whether this is an in-container (ANCO broker) call
         struct HksParam *dummyParam = NULL;
-        bool isAncoBroker = (HksGetParam(paramSet, HKS_TAG_ANCO_APP_UID, &dummyParam) == HKS_SUCCESS);
+        isAncoBroker = (HksGetParam(paramSet, HKS_TAG_ANCO_APP_UID, &dummyParam) == HKS_SUCCESS);
 
         ret = AppendToNewParamSet(paramSet, &newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy paramSet failed")
@@ -1372,13 +1373,16 @@ static int32_t AddAppInfoAndModelToParamSet(const struct HksProcessInfo *process
         } else {
             ret = AddAppInfoToParamSet(processInfo, &appInfo, newParamSet);
             HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add appInfo to paramset failed")
-            ret = AddModelToParamSet(newParamSet);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add model to paramset failed")
         }
 #else
         ret = AppendToNewParamSet(*outParamSet, &newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy outParamSet failed")
 #endif
+        // keep AddModelToParamSet called in both configurations, see below
+        if (!isAncoBroker) {
+            ret = AddModelToParamSet(newParamSet);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add model to paramset failed")
+        }
 
         ret = HksBuildParamSet(&newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "build paramset failed")

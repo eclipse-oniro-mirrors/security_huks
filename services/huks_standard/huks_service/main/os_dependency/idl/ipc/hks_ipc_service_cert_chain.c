@@ -34,6 +34,7 @@
 #define HKS_PREFIX_CERTCHAIN "CERTCHAIN_"
 #define HKS_PREFIX_USRPKEY   "USRPKEY_"
 
+#ifdef L2_STANDARD
 static struct HksBlob BuildKeyAliasFromCertChain(const struct HksBlob *certAlias)
 {
     struct HksBlob result = { 0, NULL };
@@ -182,6 +183,15 @@ void HksIpcServiceGetAnonCertChain(const struct HksBlob *srcData, const uint8_t 
     HKS_FREE_BLOB(processInfo.processName);
     HKS_FREE_BLOB(processInfo.userId);
 }
+
+#else
+void HksIpcServiceGetAnonCertChain(const struct HksBlob *srcData, const uint8_t *context)
+{
+    /* the anonymous attest broker stub only exists on the standard system */
+    (void)srcData;
+    HksSendResponse(context, HKS_ERROR_NOT_SUPPORTED, NULL);
+}
+#endif
 
 // get cert chain (non-anonymous, read from persisted storage)
 void HksIpcServiceGetCertChain(const struct HksBlob *srcData, const uint8_t *context)
