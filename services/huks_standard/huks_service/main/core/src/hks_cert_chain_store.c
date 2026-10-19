@@ -77,9 +77,7 @@ static struct HksBlob BuildCertChainAlias(const struct HksBlob *keyAlias)
         BlobHasPrefix(keyAlias, HKS_PREFIX_USRCERT) ||
         BlobHasPrefix(keyAlias, HKS_PREFIX_CACERT)) {
         result.data = (uint8_t *)HksMalloc(keyAlias->size);
-        if (result.data == NULL) {
-            return result;
-        }
+        HKS_IF_NULL_RETURN(result.data, result)
         if (memcpy_s(result.data, keyAlias->size, keyAlias->data, keyAlias->size) != EOK) {
             HKS_LOG_E("BuildCertChainAlias: copy cert alias failed");
             HKS_FREE_BLOB(result);
@@ -97,9 +95,7 @@ static struct HksBlob BuildCertChainAlias(const struct HksBlob *keyAlias)
             break;
         }
     }
-    if (matched == NULL) {
-        matched = "";
-    }
+    HKS_IF_TRUE_EXCU(matched == NULL, matched = "");
 
     size_t plen = strlen(matched);
     size_t certPrefixLen = strlen(HKS_PREFIX_CERTCHAIN);
@@ -107,9 +103,7 @@ static struct HksBlob BuildCertChainAlias(const struct HksBlob *keyAlias)
     uint32_t totalLen = certPrefixLen + bodyLen;
 
     result.data = (uint8_t *)HksMalloc(totalLen);
-    if (result.data == NULL) {
-        return result;
-    }
+    HKS_IF_NULL_RETURN(result.data, result)
     if (memcpy_s(result.data, totalLen, HKS_PREFIX_CERTCHAIN, certPrefixLen) != EOK) {
         HKS_LOG_E("BuildCertChainAlias: copy cert chain prefix failed");
         HKS_FREE_BLOB(result);
