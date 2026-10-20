@@ -52,6 +52,11 @@ const struct HksIpcEntryPoint HKS_IPC_MESSAGE_HANDLER[] = {
     { HKS_MSG_UNWRAP_KEY, HksIpcUnwrapKey },
     { HKS_MSG_ENCAPSULATE, HksIpcServiceEncapsulate },
     { HKS_MSG_DECAPSULATE, HksIpcServiceDecapsulate },
+    { HKS_MSG_EXT_GET_ANON_CERT_CHAIN, HksIpcServiceGetAnonCertChain },
+    { HKS_MSG_EXT_GET_CERT_CHAIN, HksIpcServiceGetCertChain },
+    { HKS_MSG_EXT_SET_STORAGE, HksIpcServiceSetStorage },
+    { HKS_MSG_EXT_GET_STORAGE, HksIpcServiceGetStorage },
+    { HKS_MSG_EXT_STORAGE_EXIST, HksIpcServiceStorageExist },
 
     { HKS_MSG_EXT_REGISTER, HksIpcServiceRegisterProvider },
     { HKS_MSG_EXT_UNREGISTER, HksIpcServiceUnregisterProvider },

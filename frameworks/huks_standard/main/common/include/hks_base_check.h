@@ -140,14 +140,7 @@ int32_t InitInputParamsByAlg(uint32_t alg, enum CheckKeyType checkType, struct P
 
 int32_t GetExpectParams(uint32_t alg, enum CheckKeyType checkType, struct ExpectParamsValues *expectValues);
 
-static inline bool HksAttestIsAnonymous(const struct HksParamSet *paramSet)
-{
-    struct HksParam *attestParam = NULL;
-    if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &attestParam) == HKS_SUCCESS) {
-        return attestParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS;
-    }
-    return false;
-}
+bool HksAttestIsAnonymous(const struct HksParamSet *paramSet);
 
 #ifdef __cplusplus
 }

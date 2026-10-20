@@ -55,6 +55,7 @@ if (os_level == "standard") {
 
     sources = [
       "ipc/hks_ipc_service.c",
+      "ipc/hks_ipc_service_cert_chain.c",
       "ipc/hks_permission_check.cpp",
       "ipc/hks_response.cpp",
       "ipc/hks_service_ipc_serialization.c",
@@ -138,6 +139,7 @@ if (os_level == "standard") {
 
     include_dirs = [
       "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/idl/passthrough",
+      "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/sa",
       "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/sa/sa_mgr",
       "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/include",
       "//base/security/huks/services/huks_standard/huks_service/main/extension_plugin_manger/inc",
@@ -149,6 +151,7 @@ if (os_level == "standard") {
 
     sources = [
       "ipc/hks_ipc_service.c",
+      "ipc/hks_ipc_service_cert_chain.c",
       "ipc/hks_response_samgr.c",
       "ipc/hks_service_ipc_serialization.c",
       "passthrough/huks_access.c",
