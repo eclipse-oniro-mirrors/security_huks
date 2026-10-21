@@ -105,16 +105,4 @@ private:
 } // namespace Security
 } // namespace OHOS
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-const uint8_t *HksCreateAnonAttestStub(void);
-int32_t HksWaitAnonAttestReply(const uint8_t *stubObj, uint32_t timeoutSec, struct HksBlob *outCert);
-void HksDestroyAnonAttestStub(const uint8_t *stubObj);
-
-#ifdef __cplusplus
-}
-#endif
-
 #endif // HKS_SA_INTERFACE_H

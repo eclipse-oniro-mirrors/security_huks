@@ -62,8 +62,6 @@ if (os_level == "standard") {
       "src/hks_client_service_common.c",
       "src/hks_client_service_util.c",
       "src/hks_client_service_three_stage.c",
-      "src/hks_cert_chain_store.c",
-      "src/hks_anco_inject.c",
       "src/hks_session_manager.c",
       "src/hks_se_session_manager.c",
     ]
@@ -203,8 +201,6 @@ if (os_level == "standard") {
       "src/hks_client_service_common.c",
       "src/hks_client_service_util.c",
       "src/hks_client_service_three_stage.c",
-      "src/hks_cert_chain_store.c",
-      "src/hks_anco_inject.c",
       "src/hks_session_manager.c",
       "src/hks_se_session_manager.c",
     ]

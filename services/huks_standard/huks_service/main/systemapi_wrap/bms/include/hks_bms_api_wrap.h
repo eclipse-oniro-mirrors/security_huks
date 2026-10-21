@@ -45,9 +45,6 @@ int32_t GetCallerName(const struct HksProcessInfo *processInfo, struct HksBlob *
 enum HksCallerType HksGetCallerType(void);
 
 #ifdef L2_STANDARD
-int32_t HksGetAncoAttestApplicationId(uint32_t uid, int32_t userId,
-    uint64_t versionCode, const struct HksBlob *signature, struct HksBlob *outAppId);
-
 int32_t HksGetDeveloperId(const struct HksProcessInfo *processInfo, struct HksBlob *developerId);
 
 int32_t HksCheckAssetAccessGroup(const struct HksProcessInfo *processInfo, const struct HksParamSet *paramSet);

@@ -23,7 +23,6 @@
 #endif
 
 #include "hks_client_service.h"
-#include <stdio.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -31,8 +30,6 @@
 #include <stdatomic.h>
 #include "hks_type.h"
 #include "hks_base_check.h"
-#include "hks_anco_inject.h"
-#include "hks_cert_chain_store.h"
 #include "hks_client_check.h"
 #ifdef HKS_SUPPORT_API_ATTEST_KEY
 #include "hks_client_service_dcm.h"
@@ -425,11 +422,6 @@ static void ServiceGenerateKeyCore(struct HksServiceGenKeyCtx *ctx)
         ctx->ret = AppendNewInfoForGenKeyInService(ctx->processInfo, ctx->paramSetIn, &ctx->newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "append processName tag failed, ret = %" LOG_PUBLIC "d", ctx->ret)
 
-#ifdef HKS_SUPPORT_GET_BUNDLE_INFO
-        ctx->ret = HksInjectAncoAppInfoForGenKey(ctx->processInfo, &ctx->newParamSet);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "inject anco appInfo for genKey failed, ret = %" LOG_PUBLIC "d", ctx->ret)
-#endif
-
         ctx->ret = CheckKeySecuritySeFromParamSet(ctx->newParamSet, &ctx->isSeCalling);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "CheckKeySecuritySeFromParamSet fail, ret = %" LOG_PUBLIC "d", ctx->ret)
 
@@ -724,7 +716,6 @@ int32_t HksServiceDeleteKey(const struct HksProcessInfo *processInfo, const stru
             ret = (oldRet == HKS_SUCCESS) ? HKS_SUCCESS : ret;
         }
 #endif
-        HksCertChainStoreRemove(processInfo->uidInt, keyAlias);
     } while (0);
 #ifdef L2_STANDARD
     struct HksParamSet *reportParamSet = NULL;
@@ -1357,32 +1348,21 @@ static int32_t AddAppInfoAndModelToParamSet(const struct HksProcessInfo *process
     int32_t ret;
     struct HksBlob appInfo = { 0, NULL };
     struct HksParamSet *newParamSet = NULL;
-    bool isAncoBroker = false;
 
     do {
 #ifdef HKS_SUPPORT_GET_BUNDLE_INFO
-        // check whether this is an in-container (ANCO broker) call
-        struct HksParam *dummyParam = NULL;
-        isAncoBroker = (HksGetParam(paramSet, HKS_TAG_ANCO_APP_UID, &dummyParam) == HKS_SUCCESS);
-
         ret = AppendToNewParamSet(paramSet, &newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy paramSet failed")
 
-        if (isAncoBroker) {
-            HKS_LOG_I("anco broker, skip inject (APP_ID/CERT_TYPE/MODEL in keyblob)");
-        } else {
-            ret = AddAppInfoToParamSet(processInfo, &appInfo, newParamSet);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add appInfo to paramset failed")
-        }
+        ret = AddAppInfoToParamSet(processInfo, &appInfo, newParamSet);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add appInfo to paramset failed")
 #else
         ret = AppendToNewParamSet(*outParamSet, &newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy outParamSet failed")
 #endif
-        // keep AddModelToParamSet called in both configurations, see below
-        if (!isAncoBroker) {
-            ret = AddModelToParamSet(newParamSet);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add model to paramset failed")
-        }
+
+        ret = AddModelToParamSet(newParamSet);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add model to paramset failed")
 
         ret = HksBuildParamSet(&newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "build paramset failed")
@@ -1416,19 +1396,7 @@ static int32_t DcmGenerateCertChainInAttestKey(
     (void)isSeKey;
     int32_t ret = HKS_SUCCESS;
 #ifndef HKS_UNTRUSTED_RUNNING_ENV
-    /* HksAttestIsAnonymous only checks HKS_ATTESTATION_MODE_ANONYMOUS; the Anco
-     * anonymous-compat path uses HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT, which must
-     * also fall through to the DCM offline cert generation below instead of being
-     * short-circuited as a non-anonymous attest. */
-    bool isAnonAttest = HksAttestIsAnonymous(paramSet);
-    if (!isAnonAttest) {
-        struct HksParam *modeParam = NULL;
-        if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &modeParam) == HKS_SUCCESS &&
-            modeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT) {
-            isAnonAttest = true;
-        }
-    }
-    HKS_IF_NOT_TRUE_LOGI_RETURN(isAnonAttest, HKS_SUCCESS, "non anonymous attest key.")
+    HKS_IF_NOT_TRUE_LOGI_RETURN(HksAttestIsAnonymous(paramSet), HKS_SUCCESS, "non anonymous attest key.")
 #ifdef HUKS_ENABLE_UPGRADE_KEY_STORAGE_SECURE_LEVEL
     HksUpgradeOrRequestUnlockRead();
 #endif
@@ -1437,12 +1405,7 @@ static int32_t DcmGenerateCertChainInAttestKey(
     if (ret == HKS_SUCCESS && anonyModeParam->uint32Param == HKS_ANONYMOUS_ATTEST_OFFLINE) {
         ret = DcmLocalGenerateCertChain(processInfo, certChainInfo->certChain, remoteObject);
     } else {
-        // Anco anonymous attest goes through offline cert generation
-        struct HksParam *attestModeParam = NULL;
-        if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &attestModeParam) == HKS_SUCCESS &&
-            attestModeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT) {
-            ret = DcmLocalGenerateCertChain(processInfo, certChainInfo->certChain, remoteObject);
-        } else if (isSeKey) {
+        if (isSeKey) {
             ret = DcmSeGenerateCertChain(certChainInfo->certChain, remoteObject);
         } else {
             ret = DcmGenerateCertChain(certChainInfo->certChain, remoteObject);
@@ -1559,11 +1522,6 @@ int32_t HksServiceAttestKey(const struct HksProcessInfo *processInfo, const stru
     HksOneStageReportInfo info = {ctx.ret, startTime, traceId.traceId.chainId, __func__, HKS_ONE_STAGE_ATTEST};
     (void)HksOneStageEventReport(keyAlias, &ctx.keyFromFile, ctx.newParamSet, processInfo, &info);
 #endif
-
-    // persist cert chain and challenge after attest success
-    if (ctx.ret == HKS_SUCCESS && certChain != NULL && certChain->data != NULL && certChain->size > 0) {
-        HksCertChainStoreOnAttestSuccess(processInfo->uidInt, keyAlias, paramSet, certChain);
-    }
 
     AttestFree(&ctx.keyFromFile, &ctx.newParamSet, &ctx.processInfoParamSet, &traceId);
     DecrementSeCountByService(ctx.isSeCalling);

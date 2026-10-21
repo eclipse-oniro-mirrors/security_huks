@@ -1351,12 +1351,6 @@ void HksIpcServiceGetKeyInfoList(const struct HksBlob *srcData, const uint8_t *c
 int32_t HksAttestAccessControl(struct HksParamSet *paramSet)
 {
 #ifdef HKS_SUPPORT_ACCESS_TOKEN
-    struct HksParam *ancoUidParam = NULL;
-    if (HksGetParam(paramSet, HKS_TAG_ANCO_APP_UID, &ancoUidParam) == HKS_SUCCESS) {
-        HKS_LOG_I("HksAttestAccessControl: ANCO broker call, skip permission check");
-        return HKS_SUCCESS;
-    }
-
     // check permisson for attest ids
     for (uint32_t i = 0; i < sizeof(g_idList) / sizeof(g_idList[0]); i++) {
         for (uint32_t j = 0; j < paramSet->paramsCnt; j++) {
