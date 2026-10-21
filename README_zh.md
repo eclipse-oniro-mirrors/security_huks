@@ -16,7 +16,7 @@ HUKS模块可以分为如下三大部分：
 
 -   HUKS Service层：实现HUKS密钥管理、存储等功能。
 
--   HUKS Core层：HUKS核心模块，负责密钥生成以及加解密等工作。对于标准系统设备，该部分模块在商用场景下必须在安全环境下运行，包括TEE或者具备安全能力的芯片等。由于安全环境需要特定硬件支持，因此在开源代码中为模拟实现。对于小型和轻量系统，HUKS模块默认提供根密钥保护方案的模拟实现，并支持基于硬件密码引擎的根密钥保护方案：通过编译选项huks_enable_hisilicon_cipher_in_small使能后，根密钥材料由硬件密码引擎加解密保护，随机数由硬件密码引擎生成，设备唯一标识基于OTP中的DieID计算，该方案需板级提供huks_cipher_adapter适配实现。商用场景下必须根据产品能力适配硬件根密钥或者使用其他根密钥保护方案。
+-   HUKS Core层：HUKS核心模块，负责密钥生成以及加解密等工作。对于标准系统设备，该部分模块在商用场景下必须在安全环境下运行，包括TEE或者具备安全能力的芯片等。由于安全环境需要特定硬件支持，因此在开源代码中为模拟实现。对于小型和轻量系统，HUKS模块默认提供根密钥保护方案的模拟实现；仅搭载内置硬件密码引擎的海思芯片的小型系统设备，可通过编译选项huks_enable_hisilicon_cipher_in_small使能基于硬件密码引擎的根密钥保护方案，该方案需板级提供huks_cipher_adapter适配实现，详见“编译构建”章节。商用场景下必须根据产品能力适配硬件根密钥或者使用其他根密钥保护方案。
 
 HUKS部件架构如下图所示：
 
@@ -57,9 +57,9 @@ HUKS部件架构如下图所示：
 ./build.sh --product-name rk3568 --build-target out/rk3568/build_configs/security/huks:huks_test
 ```
 
-**使能硬件密码引擎根密钥保护（可选，小型系统）**
+**使能硬件密码引擎根密钥保护（可选，仅小型系统）**
 
-在产品配置中将huks_enable_hisilicon_cipher_in_small设置为true，可使能基于硬件密码引擎的根密钥保护方案，需板级提供huks_cipher_adapter适配实现。
+该方案仅适用于搭载内置硬件密码引擎的海思芯片的小型系统设备，且依赖板级适配：设备侧需在板级适配目录（ohos_board_adapter_dir）下提供huks_cipher_adapter，并实现drivers_peripheral/huks仓中huks_hdi_cipher.h声明的接口（HksCipherEncryptAndDecrypt、HksCipherGenerateRandom、GetDevDieid），本仓不包含该适配代码。适配就绪后，在产品配置中将huks_enable_hisilicon_cipher_in_small设置为true即可使能：根密钥材料由硬件密码引擎加解密保护，随机数由硬件密码引擎生成，设备唯一标识基于OTP中的DieID计算。未适配的设备开启该开关将导致编译失败。
 
 ## 说明
 
