@@ -273,4 +273,61 @@ HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest005, TestSize.Level0)
     HksFreeParamSet(&paramSet);
 }
 
+/**
+ * @tc.name: HksUkeyCommonTest.HksUkeyCommonTest006
+ * @tc.desc: tdd HKS_EXT_CRYPTO_TAG_TIMEOUT is registered in HKS_VALID_TAGS — ext timeout
+ *           tag + KEY_CLASS_EXTENSION passes HksCheckParamSetValidity and HksCheckIsUkeyOperation
+ *           succeeds (ext-code timeout tag path; complements Test005 which uses HKS_TAG_TIMEOUT)
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest006, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksUkeyCommonTest006");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_KEY_CLASS, .uint32Param = HKS_KEY_CLASS_EXTENSION },
+        { .tag = HKS_EXT_CRYPTO_TAG_TIMEOUT, .uint32Param = 30 },
+    };
+    ret = HksAddParams(paramSet, params, 2);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    EXPECT_EQ(HksCheckParamSetValidity(paramSet), HKS_SUCCESS);
+    int32_t outRet = HKS_SUCCESS;
+    EXPECT_EQ(HksCheckIsUkeyOperation(paramSet, &outRet), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksUkeyCommonTest.HksUkeyCommonTest007
+ * @tc.desc: tdd timeout tag absent — paramSet with KEY_CLASS_EXTENSION but no timeout tag.
+ *           HksCheckIsUkeyOperation still succeeds (KEY_CLASS is the ukey identifier, not
+ *           timeout tag); the sync/async mode switch is decided by HksIsUkeyAsyncMsg, not here.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyCommonTest, HksUkeyCommonTest007, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksUkeyCommonTest007");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_KEY_CLASS, .uint32Param = HKS_KEY_CLASS_EXTENSION },
+    };
+    ret = HksAddParams(paramSet, params, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    EXPECT_EQ(HksCheckParamSetValidity(paramSet), HKS_SUCCESS);
+    int32_t outRet = HKS_SUCCESS;
+    EXPECT_EQ(HksCheckIsUkeyOperation(paramSet, &outRet), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
 }

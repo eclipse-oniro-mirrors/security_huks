@@ -160,17 +160,68 @@ OHOS::Security::Hks::HksTaskExecutor *HuksPluginLoader::GetTaskExecutor()
 }
 
 
-int32_t HuksPluginLoader::SubmitTaskExecutor(std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task)
+int32_t HuksPluginLoader::SubmitTaskExecutor(const std::string &providerName,
+    std::unique_ptr<OHOS::Security::Hks::HksAsyncTask> task)
 {
-    // Get+Submit inside the libMutex critical section: mutually exclusive with DlcloseInternal
-    // (same lock), closing the UAF window where "the executor pointer is obtained and then the
-    // SO is dlclosed". The submission critical section is very short (enqueue + notify,
-    // microseconds), so it poses no deadlock risk with register/unload.
-    std::lock_guard<std::mutex> lock(libMutex);
-    HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, -1) // SO not loaded: executor does not exist
-    auto *executor = GetTaskExecutor();
-    HKS_IF_TRUE_RETURN(executor == nullptr, -1)
-    return static_cast<int32_t>(executor->Submit(std::move(task)));
+    // Empty providerName (extraction failed or legacy code path) falls back to the SO-internal
+    // global executor via dlsym — preserves the original behavior when providerName is unavailable.
+    if (providerName.empty()) {
+        std::lock_guard<std::mutex> lock(libMutex);
+        HKS_IF_TRUE_RETURN(m_pluginHandle == nullptr, -1)
+        auto *executor = GetTaskExecutor();
+        HKS_IF_TRUE_RETURN(executor == nullptr, -1)
+        return static_cast<int32_t>(executor->Submit(std::move(task)));
+    }
+    // Per-provider executor: created on first use (1 worker + 16 pending), isolating slow
+    // operations from other providers. executorMutex_ protects the map and is held across
+    // Submit to prevent a UAF window: without holding the lock, a concurrent
+    // StopExecutorForProvider could remove and destroy the executor between the lookup
+    // and the Submit call. Submit is O(1) (push_back + notify, no blocking), so the lock
+    // hold time is negligible. StopExecutorForProvider's Stop()+join runs outside the lock.
+    std::lock_guard<std::mutex> lock(executorMutex_);
+    auto it = executors_.find(providerName);
+    if (it != executors_.end()) {
+        it->second->Start();
+        int32_t ret = static_cast<int32_t>(it->second->Submit(std::move(task)));
+        if (ret == static_cast<int32_t>(OHOS::Security::Hks::HksTaskAccept::STOPPED)) {
+            HKS_LOG_E("per-provider executor still stopped after restart, evicting, provider=%{public}s",
+                providerName.c_str());
+            executors_.erase(it);
+        }
+        return ret;
+    }
+    auto newExecutor = std::make_unique<Hks::HksTaskExecutor>(Hks::HksTaskExecutor::Config{});
+    newExecutor->Start();
+    int32_t acceptRaw = static_cast<int32_t>(newExecutor->Submit(std::move(task)));
+    if (acceptRaw == static_cast<int32_t>(OHOS::Security::Hks::HksTaskAccept::STOPPED)) {
+        // Start failed (pthread_create); do not cache the dead executor — the next
+        // Submit will create a fresh one and retry.
+        HKS_LOG_E("per-provider executor start failed, not cached, provider=%{public}s",
+            providerName.c_str());
+    } else {
+        HKS_LOG_I("per-provider executor created, provider=%{public}s", providerName.c_str());
+        executors_[providerName] = std::move(newExecutor);
+    }
+    return acceptRaw;
+}
+
+int32_t HuksPluginLoader::StopExecutorForProvider(const std::string &providerName)
+{
+    std::unique_ptr<OHOS::Security::Hks::HksTaskExecutor> executorToStop;
+    {
+        std::lock_guard<std::mutex> lock(executorMutex_);
+        auto it = executors_.find(providerName);
+        if (it == executors_.end()) {
+            return HKS_SUCCESS; // not found: already stopped or never created
+        }
+        executorToStop = std::move(it->second);
+        executors_.erase(it);
+    }
+    HKS_LOG_I("per-provider executor stopping, provider=%{public}s", providerName.c_str());
+    executorToStop->Stop(); // join in-flight tasks (<=60s) + drain queued
+    executorToStop.reset();
+    HKS_LOG_I("per-provider executor stopped, provider=%{public}s", providerName.c_str());
+    return HKS_SUCCESS;
 }
 
 int32_t HuksPluginLoader::StartTaskExecutor()

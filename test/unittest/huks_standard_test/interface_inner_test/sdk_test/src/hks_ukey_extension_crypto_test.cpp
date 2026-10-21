@@ -162,6 +162,43 @@ HWTEST_F(HksUkeyExtensionCryptoTest, HksQueryAbilityInfoTest001, TestSize.Level0
     EXPECT_NE(ret, HKS_SUCCESS);
 }
 
+HWTEST_F(HksUkeyExtensionCryptoTest, HksQueryAbilityInfoTest002, TestSize.Level0)
+{
+    int32_t ret = 0;
+    std::string resourceId = "{\"providerName\":\"P01\",\"abilityName\":\"CryptoAbility\""
+        ",\"bundleName\":\"com.hmos.hukstest.ukey\",\"index\":{\"key\":\"key1\"}}";
+    struct HksBlob resourceBlob = StringToHuksBlob(resourceId.data());
+    EXPECT_NE(resourceBlob.data, nullptr);
+
+    struct HksParamSet *paramSet = nullptr;
+    struct HksParam params[] = {
+        { .tag = HKS_EXT_CRYPTO_TAG_TIMEOUT, .uint32Param = 10 },
+    };
+    ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksAddParams(paramSet, params, sizeof(params) / sizeof(params[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksAbilityInfo abilityInfo = {};
+    abilityInfo.abilityName.data = (uint8_t*)HksMalloc(128);
+    abilityInfo.abilityName.size = 128;
+    abilityInfo.bundleName.data = (uint8_t*)HksMalloc(128);
+    abilityInfo.bundleName.size = 128;
+
+    ret = HksQueryAbilityInfo(&resourceBlob, paramSet, &abilityInfo);
+    if (ret != HKS_SUCCESS) {
+        HKS_TEST_LOG_I("HksQueryAbilityInfoTest002, ret = %d", ret);
+    }
+
+    HKS_FREE_BLOB(abilityInfo.abilityName);
+    HKS_FREE_BLOB(abilityInfo.bundleName);
+    HksFreeParamSet(&paramSet);
+    HKS_TEST_LOG_I("HksQueryAbilityInfoTest002 executed!");
+    EXPECT_NE(ret, HKS_SUCCESS);
+}
+
 HWTEST_F(HksUkeyExtensionCryptoTest, HksExportProviderCertificatesTest001, TestSize.Level0)
 {
     int32_t ret = 0;

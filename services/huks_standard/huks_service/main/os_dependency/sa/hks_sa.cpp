@@ -265,7 +265,9 @@ static bool TrySubmitUkeyAsyncIfMatch(uint32_t code, MessageParcel &data, uint32
         // a raw paramSet)
         isUkeyMsg = OHOS::Security::Hks::HksIsUkeyStandardMsgCode(code, srcData);
     }
-    HKS_LOG_I("ukey msg check, code=%u isUkey=%d", code, isUkeyMsg ? 1 : 0);
+    if (isUkeyMsg) {
+        HKS_LOG_I("ukey msg check, code=%" LOG_PUBLIC "u", code);
+    }
     if (!isUkeyMsg) {
         return false;
     }

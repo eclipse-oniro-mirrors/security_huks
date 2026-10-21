@@ -208,18 +208,20 @@ int32_t HksUKeyGeneralUnpack(const struct HksBlob *srcData, struct HksBlob *blob
     return HKS_SUCCESS;
 }
 
-int32_t HksBlob3ParamSetUnpack(const struct HksBlob *srcData, struct HksBlob *blob1,
-    struct HksBlob *blob2, struct HksBlob *blob3, struct HksParamSet **paramSet)
+int32_t HksAbilityAndParamSetUnpack(const struct HksBlob *srcData, struct HksBlob *resourceId,
+    struct HksAbilityInfo *abilityInfo, struct HksParamSet **paramSet)
 {
     uint32_t offset = 0;
     int32_t ret;
     do {
-        ret = GetBlobFromBuffer(blob1, srcData, &offset);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob1 failed!");
-        ret = GetBlobFromBuffer(blob2, srcData, &offset);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob2 failed!");
-        ret = GetBlobFromBuffer(blob3, srcData, &offset);
-        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get blob3 failed!");
+        ret = GetBlobFromBuffer(resourceId, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get resourceId failed!");
+        ret = GetBlobFromBuffer(&abilityInfo->bundleName, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get bundleName failed!");
+        ret = GetBlobFromBuffer(&abilityInfo->abilityName, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get abilityName failed!");
+        ret = GetUint32FromBuffer((uint32_t *)&abilityInfo->abilityType, srcData, &offset);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get abilityType failed!");
         if (offset < srcData->size && paramSet != NULL) {
             ret = GetParamSetFromBuffer(paramSet, srcData, &offset);
             HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "get paramSet failed!");

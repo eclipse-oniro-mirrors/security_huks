@@ -75,9 +75,9 @@ int32_t HuksPluginLifeCycleMgr::RegisterProvider(const struct HksProcessInfo &in
     ret = OnRegistProvider(info, providerName, paramSet, deathCallback);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "regist provider method in plugin loader is fail")
 
-    // ukey async refactor: start the SO-internal thread pool at the end of the successful
-    // registration path (idempotent; if worker creation fails, Submit always returns STOPPED
-    // and reports the error via the callback, and the registration itself is not rolled back)
+    // Per-provider executors are created on first Submit (lazy), so no global Start is needed.
+    // The SO-internal global executor (fallback for empty providerName) is still started here
+    // for the fallback path.
     if (pluginLoader != nullptr) {
         (void)pluginLoader->StartTaskExecutor();
     }
@@ -190,6 +190,16 @@ int32_t HuksPluginLifeCycleMgr::UnRegisterProvider(const struct HksProcessInfo &
         deleteCount = currentRefCount;
     }
     m_refCount.fetch_sub(deleteCount, std::memory_order_acq_rel);
+    lock.unlock();
+
+    // Stop the per-provider executor after releasing soMutex: Stop()+join blocks until
+    // in-flight tasks finish (<=60s); holding soMutex during join would deadlock with the
+    // AutoRefCount dispatch path. executorMutex_ (inside StopExecutorForProvider) is
+    // separate and safe.
+    auto loader = HuksPluginLoader::GetInstanceWrapper();
+    if (loader != nullptr) {
+        (void)loader->StopExecutorForProvider(providerName);
+    }
 
     return ret;
 }

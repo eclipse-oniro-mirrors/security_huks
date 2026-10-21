@@ -57,9 +57,9 @@ constexpr uint32_t HKS_UKEY_ASYNC_DEFAULT_TIMEOUT = 60;
 constexpr uint32_t HKS_UKEY_ASYNC_WAIT_MARGIN = 15;
 
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
-// Timeout parsing: tag unit is seconds; 0/unset = uniform default 60s; >900 rejected (the check
-// happens before sending). The tag is selected per code layout: reused standard-code ukey
-// operations read HKS_TAG_TIMEOUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
+// Timeout parsing: tag unit is seconds; unset = uniform default 60s; valid range [1, 900]
+// The tag is selected per code layout: reused standard-code ukey operations
+// read HKS_TAG_TIMEOUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
 // (HksUkeyTimeoutTagByMsgCode is the single source of truth).
 int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInterfaceCode msgCode,
     uint32_t *timeout)
@@ -73,15 +73,16 @@ int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInter
     HKS_IF_TRUE_LOGE_RETURN(GetTagType((enum HksTag)timeoutParam->tag) != HKS_TAG_TYPE_UINT,
         HKS_ERROR_INVALID_ARGUMENT, "timeout tag type invalid");
     uint32_t val = timeoutParam->uint32Param;
-    HKS_IF_TRUE_LOGE_RETURN(val > HKS_UKEY_ASYNC_MAX_TIMEOUT, HKS_ERROR_INVALID_ARGUMENT,
-        "timeout %" LOG_PUBLIC "u not supported, must <= %" LOG_PUBLIC "u", val, HKS_UKEY_ASYNC_MAX_TIMEOUT);
-    *timeout = (val == 0) ? *timeout : val;
+    HKS_IF_TRUE_LOGE_RETURN(val == 0 || val > HKS_UKEY_ASYNC_MAX_TIMEOUT, HKS_ERROR_INVALID_ARGUMENT,
+        "timeout %" LOG_PUBLIC "u not supported, must be in [1, %" LOG_PUBLIC "u]",
+        val, HKS_UKEY_ASYNC_MAX_TIMEOUT);
+    *timeout = val;
     return HKS_SUCCESS;
 }
 
-// ukey async decision: extension-only-code whitelist + reused standard codes checked via
-// HksCheckIsUkeyOperation (KEY_CLASS == EXTENSION).
-bool HksIsUkeyAsyncMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
+// ukey operation identification (regardless of async/sync mode): ext codes are always ukey;
+// standard codes are ukey only when KEY_CLASS == EXTENSION (requires non-null paramSet).
+bool HksIsUkeyOperationMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
 {
     switch (msgCode) {
         case HKS_MSG_EXT_AUTH_UKEY_PIN:
@@ -108,11 +109,25 @@ bool HksIsUkeyAsyncMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSe
         msgCode == HKS_MSG_UPDATE || msgCode == HKS_MSG_FINISH || msgCode == HKS_MSG_ABORT) {
         int32_t outRet = 0;
         bool isUkey = (HksCheckIsUkeyOperation(paramSet, &outRet) == HKS_SUCCESS);
-        HKS_LOG_I("ukey client async check, code=%u isUkey=%d outRet=%d",
-            static_cast<uint32_t>(msgCode), isUkey ? 1 : 0, outRet);
+        HKS_IF_NOT_TRUE_LOGI(!isUkey, "ukey client check, code=%" LOG_PUBLIC "u outRet=%" LOG_PUBLIC "d",
+            static_cast<uint32_t>(msgCode), outRet);
         return isUkey;
     }
     return false;
+}
+
+// ukey async decision: the timeout tag is the mode switch — present -> async, absent -> sync
+bool HksIsUkeyAsyncMsg(enum HksIpcInterfaceCode msgCode, const struct HksParamSet *paramSet)
+{
+    HKS_IF_TRUE_RETURN(paramSet == nullptr, false);
+
+    struct HksParam *timeoutParam = nullptr;
+    enum HksTag timeoutTag = HksUkeyTimeoutTagByMsgCode(static_cast<uint32_t>(msgCode));
+
+    // no timeout tag -> sync
+    HKS_IF_TRUE_RETURN(HksGetParam(paramSet, timeoutTag, &timeoutParam) != HKS_SUCCESS, false);
+
+    return true;
 }
 #endif // HKS_UKEY_EXTENSION_CRYPTO
 } // namespace
@@ -137,14 +152,15 @@ static int32_t HksUkeySendAsync(enum HksIpcInterfaceCode msgCode, MessageParcel 
     MessageOption option = MessageOption::TF_SYNC;
     ret = proxy->SendRequest(msgCode, data, reply, option); // admission reply; the result comes via the callback
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_IPC_MSG_FAIL, "SendRequest failed %" LOG_PUBLIC "d", ret);
-    HKS_LOG_I("ukey client async request accepted, code=%u timeout=%us",
+    HKS_LOG_I("ukey client async request accepted, code=%" LOG_PUBLIC "u timeout=%" LOG_PUBLIC "us",
         static_cast<uint32_t>(msgCode), timeout);
 
     // Wait = timeout + margin: after the server-side JS callback wait (=timeout) times out, the
     // reply round-trip still needs time; see HKS_UKEY_ASYNC_WAIT_MARGIN.
     auto [errCode, receivedData, receivedSize, receivedCode, errInfo] =
         hksCallback->WaitForAsyncReply(timeout + HKS_UKEY_ASYNC_WAIT_MARGIN);
-    HKS_LOG_I("ukey client async wait returned, code=%u errCode=%u receivedCode=%u size=%u",
+    HKS_LOG_I("ukey client async wait returned, code=%" LOG_PUBLIC "u errCode=%" LOG_PUBLIC "u"
+        " receivedCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
         static_cast<uint32_t>(msgCode), errCode, receivedCode, receivedSize);
     // (2) Faithful error code: errCode is passed through (BUSY/timeout/execution failure are
     // distinguishable); the error path also passes through errInfo.
@@ -377,6 +393,33 @@ static int32_t WriteCommonRequestData(MessageParcel &data,
 }
 
 
+// INIT death-notification callback: on the first INIT after a bundle death, atomically claim
+// the flag, create a persistent HksStub, and write it into the parcel. Subsequent INIT calls
+// (CAS fails) skip this. Returns HKS_SUCCESS to continue, or an error to abort.
+static int32_t TryWriteInitDeathCallback(enum HksIpcInterfaceCode type, MessageParcel &data)
+{
+    if (type != HKS_MSG_INIT) {
+        return HKS_SUCCESS;
+    }
+    bool flag = false;
+    if (!std::atomic_compare_exchange_strong(&g_isInitBundleDead, &flag, true)) {
+        return HKS_SUCCESS; // another thread already claimed it
+    }
+    g_hks_callback = new (std::nothrow) Security::Hks::HksStub();
+    if (g_hks_callback == NULL) {
+        g_isInitBundleDead = false;
+        HKS_LOG_E("new HksStub failed");
+        return HKS_ERROR_INSUFFICIENT_MEMORY;
+    }
+    if (!data.WriteRemoteObject(g_hks_callback)) {
+        g_isInitBundleDead = false;
+        g_hks_callback = NULL;
+        HKS_LOG_E("write remote object fail");
+        return HKS_ERROR_IPC_MSG_FAIL;
+    }
+    return HKS_SUCCESS;
+}
+
 int32_t HksSendRequest(enum HksIpcInterfaceCode type, const struct HksBlob *inBlob,
     struct HksBlob *outBlob, const struct HksParamSet *paramSet)
 {
@@ -392,37 +435,23 @@ int32_t HksSendRequest(enum HksIpcInterfaceCode type, const struct HksBlob *inBl
     MessageParcel reply;
     MessageOption option((sendType == HKS_SEND_TYPE_SYNC) ? MessageOption::TF_SYNC : MessageOption::TF_ASYNC);
     ret = WriteCommonRequestData(data, inBlob, outBlob);
-    if (ret != HKS_SUCCESS) {
-        HKS_LOG_E("WriteCommonRequestData failed %" LOG_PUBLIC "d", ret);
-        return ret;
-    }
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "WriteCommonRequestData failed %" LOG_PUBLIC "d", ret);
 
     sptr<IRemoteObject> proxy = GetHksProxy();
     HKS_IF_NULL_LOGE_RETURN(proxy, HKS_ERROR_BAD_STATE, "GetHksProxy null");
 
-    // ukey async takes priority: must come before the INIT death-notification block (double-write
-    // guard — ukey INIT returns early and never falls into the g_hks_callback write).
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
-    if (HksIsUkeyAsyncMsg(type, paramSet)) {
+    bool isUkeyOp = HksIsUkeyOperationMsg(type, paramSet);
+    if (isUkeyOp && HksIsUkeyAsyncMsg(type, paramSet)) {
+        HKS_LOG_I("ukey operation mode: ASYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
         return HksUkeySendAsync(type, data, paramSet, proxy, outBlob);
     }
+    HKS_IF_NOT_TRUE_LOGI(!isUkeyOp, "ukey operation mode: SYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
 #endif
 
-    bool flag = false;
-    if (type == HKS_MSG_INIT && std::atomic_compare_exchange_strong(&g_isInitBundleDead, &flag, true)) {
-        g_hks_callback = new (std::nothrow) Security::Hks::HksStub();
-        if (g_hks_callback == NULL) {
-            g_isInitBundleDead = false;
-            HKS_LOG_E("new HksStub failed");
-            return HKS_ERROR_INSUFFICIENT_MEMORY;
-        }
-        if (!data.WriteRemoteObject(g_hks_callback)) {
-            g_isInitBundleDead = false;
-            g_hks_callback = NULL;
-            HKS_LOG_E("write remote object fail");
-            return HKS_ERROR_IPC_MSG_FAIL;
-        }
-    }
+    ret = TryWriteInitDeathCallback(type, data);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "TryWriteInitDeathCallback failed");
+
     if (type == HKS_MSG_ATTEST_KEY_ASYNC_REPLY) {
         return SendAttestKeyAsyncMessage(data, proxy, outBlob);
     }

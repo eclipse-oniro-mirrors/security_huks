@@ -33,6 +33,9 @@ namespace OHOS {
 namespace Security {
 namespace Hks {
 
+void RegisterHandleRouting(uint64_t handle, const std::string &providerName, const sptr<IRemoteObject> &clientStub);
+void UnregisterHandleRouting(uint64_t handle, const sptr<IRemoteObject> &clientStub);
+
 namespace {
 // Deep-copies a HksBlob (allocated with HksMalloc; sensitive-data zeroing and release are
 // uniformly handled by ReleaseData)
@@ -57,7 +60,8 @@ HksUkeyAsyncTask::HksUkeyAsyncTask(const HksUkeyTaskParams &params,
     std::shared_ptr<Huks::IHksProviderProxyResolver> proxyResolver)
     : msgCode_(params.msgCode), handler_(params.handler), threeStageHandler_(params.threeStageHandler),
       fullTokenId_(params.fullTokenId), timeoutMs_(params.timeoutMs), outSize_(params.outSize),
-      clientStub_(params.clientStub), proxyResolver_(proxyResolver)
+      clientStub_(params.clientStub), proxyResolver_(proxyResolver), routingKey_(params.routingKey),
+      handleAtSubmit_(params.handleAtSubmit)
 {
     // Deep-copy the three items: srcData + processInfo embedded blobs; identity integer values
     // are copied directly.
@@ -204,6 +208,24 @@ void HksUkeyAsyncTask::OnDone(int32_t ret)
     if (cancelled_ != nullptr && cancelled_->load(std::memory_order_relaxed)) {
         return;
     }
+
+    // Per-provider routing table management:
+    // - INIT success: extract handle from outData (first 8 bytes), write handle→routingKey
+    //   into the routing table, register a death recipient on clientStub_ for auto-cleanup.
+    //   Must happen BEFORE SendAsyncReply (the client sends UPDATE only after receiving the
+    //   reply, so the entry is guaranteed to exist when UPDATE arrives).
+    // - FINISH/ABORT: remove the handle→routingKey entry and unregister the death recipient.
+    //   handleAtSubmit_ was extracted at submit time (from PARAM1_BUFFER).
+    if ((msgCode_ == HKS_MSG_INIT) && (ret == HKS_SUCCESS) && (outDataRaw_ != nullptr)
+        && (outSize_ >= sizeof(uint64_t))) {
+        uint64_t handle = 0;
+        (void)memcpy_s(&handle, sizeof(handle), outDataRaw_, sizeof(uint64_t));
+        RegisterHandleRouting(handle, routingKey_, clientStub_);
+    }
+    if ((msgCode_ == HKS_MSG_FINISH || msgCode_ == HKS_MSG_ABORT) && handleAtSubmit_ != 0) {
+        UnregisterHandleRouting(handleAtSubmit_, clientStub_);
+    }
+
     // Reply via the client callback object (wire code = original request code, errCode = real
     // result code). SendAsyncReply only reads the data into the parcel (does not move or take
     // over) — a temporary unique_ptr is lent out and released back to the raw pointer afterwards:
