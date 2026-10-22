@@ -132,9 +132,6 @@ int32_t HksDecapsulateUnpackFromService(const struct HksBlob *srcData, struct Hk
 
 int32_t HksEncapsulateUnpackFromService(const struct HksBlob *srcData, struct HksEncapsulationResult *encapResult);
 
-int32_t HksSetStoragePack(struct HksBlob *destData, const struct HksBlob *keyAlias,
-    const struct HksParamSet *paramSet, const struct HksBlob *data);
-
 int32_t HksQueryAbilityCopyResult(const struct HksBlob *resourceId, const struct HksAbilityInfo *abilityInfo,
     struct HksBlob *outResourceId, struct HksAbilityInfo *outHksAbilityInfo);
 

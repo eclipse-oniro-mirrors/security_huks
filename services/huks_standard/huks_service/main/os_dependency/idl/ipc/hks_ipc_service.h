@@ -108,16 +108,6 @@ void HksIpcServiceEncapsulate(const struct HksBlob *srcData, const uint8_t *cont
 
 void HksIpcServiceDecapsulate(const struct HksBlob *srcData, const uint8_t *context);
 
-void HksIpcServiceGetAnonCertChain(const struct HksBlob *srcData, const uint8_t *context);
-
-void HksIpcServiceGetCertChain(const struct HksBlob *srcData, const uint8_t *context);
-
-void HksIpcServiceSetStorage(const struct HksBlob *srcData, const uint8_t *context);
-
-void HksIpcServiceGetStorage(const struct HksBlob *srcData, const uint8_t *context);
-
-void HksIpcServiceStorageExist(const struct HksBlob *srcData, const uint8_t *context);
-
 #ifdef __cplusplus
 }
 #endif

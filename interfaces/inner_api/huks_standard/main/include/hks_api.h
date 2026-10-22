@@ -473,56 +473,6 @@ HKS_API_EXPORT int32_t HksDecapsulate(const struct HksBlob *keyAlias, const stru
     struct HksBlob *encapOrsharedSecret);
 
 /**
- * @brief Get anonymous certificate chain for bridge scheme.
- * SA reads stored challenge and does anonymous attestation internally.
- * @param keyAlias key alias
- * @param paramSet paramSet (can be empty)
- * @param certChain output cert chain blob (caller pre-allocates buffer)
- * @return error code, see hks_type.h
- */
-HKS_API_EXPORT int32_t HksGetAnonCertChain(const struct HksBlob *keyAlias,
-    const struct HksParamSet *paramSet, struct HksBlob *certChain);
-
-/**
- * @brief Get non-anonymous certificate chain for bridge scheme.
- * SA reads persisted cert chain (stored on attest success) and returns it.
- * @param keyAlias key alias
- * @param paramSet paramSet (can be empty)
- * @param certChain output cert chain blob (caller pre-allocates buffer)
- * @return error code, see hks_type.h
- */
-HKS_API_EXPORT int32_t HksGetCertChain(const struct HksBlob *keyAlias,
-    const struct HksParamSet *paramSet, struct HksBlob *certChain);
-
-/**
- * @brief Persist arbitrary certificate data (CERTCHAIN_ / USRCERT_ / CACERT_ prefixed).
- * @param keyAlias storage alias (with certificate prefix)
- * @param paramSet paramSet (can be empty)
- * @param data data blob to persist
- * @return error code, see hks_type.h
- */
-HKS_API_EXPORT int32_t HksSetStorage(const struct HksBlob *keyAlias,
-    const struct HksParamSet *paramSet, const struct HksBlob *data);
-
-/**
- * @brief Read persisted certificate data (CERTCHAIN_ / USRCERT_ / CACERT_ prefixed).
- * @param keyAlias storage alias (with certificate prefix)
- * @param paramSet paramSet (can be empty)
- * @param data output data blob (caller pre-allocates buffer)
- * @return error code, see hks_type.h
- */
-HKS_API_EXPORT int32_t HksGetStorage(const struct HksBlob *keyAlias,
-    const struct HksParamSet *paramSet, struct HksBlob *data);
-
-/**
- * @brief Check existence of persisted certificate data (CERTCHAIN_ / USRCERT_ / CACERT_ prefixed).
- * @param keyAlias storage alias (with certificate prefix)
- * @param paramSet paramSet (can be empty)
- * @return HKS_SUCCESS if exists, HKS_ERROR_NOT_EXIST if not
- */
-HKS_API_EXPORT int32_t HksStorageExist(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet);
-
-/**
  * @brief Big-numble exponent mod x = a^e mod n
  * @param x result
  * @param a base

@@ -892,12 +892,3 @@ int32_t HksEncapsulateResponsePack(struct HksEncapsulationResult *encapResult, s
 
     return ret;
 }
-
-int32_t HksSetStorageUnpack(const struct HksBlob *srcData, struct HksBlob *keyAlias,
-    struct HksParamSet **paramSet, struct HksBlob *data)
-{
-    uint32_t offset = 0;
-    int32_t ret = GetKeyAndParamSetFromBuffer(srcData, keyAlias, paramSet, &offset);
-    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "GetKeyAndParamSetFromBuffer failed")
-    return GetBlobFromBuffer(data, srcData, &offset);
-}

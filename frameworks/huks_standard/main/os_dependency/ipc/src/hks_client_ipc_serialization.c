@@ -1002,15 +1002,3 @@ int32_t  HksDecapsulateUnpackFromService(const struct HksBlob *srcData, struct H
 
     return HKS_SUCCESS;
 }
-
-int32_t HksSetStoragePack(struct HksBlob *destData, const struct HksBlob *keyAlias,
-    const struct HksParamSet *paramSet, const struct HksBlob *data)
-{
-    uint32_t offset = 0;
-    int32_t ret = CopyBlobToBuffer(keyAlias, destData, &offset);
-    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "copy keyAlias failed")
-
-    ret = CopyParamSetToBuffer(paramSet, destData, &offset);
-    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "copy paramSet failed")
-    return CopyBlobToBuffer(data, destData, &offset);
-}

@@ -82,11 +82,6 @@
     HksGetResourceId;
     HksEncapsulate;
     HksDecapsulate;
-    HksGetAnonCertChain;
-    HksGetCertChain;
-    HksSetStorage;
-    HksGetStorage;
-    HksStorageExist;
     HksGetUkeyGlobalInfo;
     HksSetUkeyGlobalInfo;
     HksClearUkeyGlobalInfo;
