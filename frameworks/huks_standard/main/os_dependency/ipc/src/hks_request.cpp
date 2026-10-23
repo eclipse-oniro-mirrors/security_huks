@@ -54,7 +54,7 @@ constexpr uint32_t HKS_UKEY_ASYNC_DEFAULT_TIMEOUT = 60;
 // ~timeout+ε, the client would have already given up -> 12000012. The margin covers the
 // server-side timeout decision + task scheduling + the IPC reply round-trip (normal operations
 // return far earlier than the timeout, so they are unaffected).
-constexpr uint32_t HKS_UKEY_ASYNC_WAIT_MARGIN = 15;
+constexpr uint32_t HKS_UKEY_ASYNC_WAIT_MARGIN = 0;
 
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
 // Timeout parsing: tag unit is seconds; unset = uniform default 60s; valid range [1, 900]
