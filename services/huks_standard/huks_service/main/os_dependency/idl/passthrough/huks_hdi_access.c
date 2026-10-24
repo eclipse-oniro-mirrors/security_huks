@@ -75,44 +75,56 @@ ENABLE_CFI(static int32_t InitWrapperInstance())
 }
 
 #ifndef HKS_SUPPORT_SM_ALGORITHM
+static int32_t HksCheckAlg(const struct HksParamSet *paramSet) {
+    int32_t ret = HKS_FAILURE;
+    struct HksParam *algParam = NULL;
+    ret = HksGetParam(paramSet, HKS_TAG_ALGORITHM, &algParam);
+    if (ret != HKS_SUCCESS && ret != HKS_ERROR_PARAM_NOT_EXIST) {
+        return ret;
+    }
+    if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+        return HKS_SUCCESS;
+    }
+    uint32_t alg = algParam->uint32Param;
+    if (alg == HKS_ALG_SM2 || alg == HKS_ALG_SM3 || alg == HKS_ALG_SM4) {
+        HKS_LOG_E("SM algorithm not support when HKS_SUPPORT_SM_AIGORITHM is disabled");
+        return HKS_ERROR_NOT_SUPPORTED;
+    }
+    return HKS_SUCCESS;
+}
+
+static int32_t HksCheckDigest(const struct HksParamSet *paramSet) {
+    int32_t ret = HKS_FAILURE;
+    struct HksParam *algParam = NULL;
+    ret = HksGetParam(paramSet, HKS_TAG_DIGEST, &algParam);
+    if (ret != HKS_SUCCESS && ret != HKS_ERROR_PARAM_NOT_EXIST) {
+        return ret;
+    }
+    if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+        return HKS_SUCCESS;
+    }
+    if (algParam->uint32Param == HKS_DIGEST_SM3) {
+        HKS_LOG_E("SM3 digest not support when HKS_SUPPORT_SM_AIGORITHM is disabled");
+        return HKS_ERROR_NOT_SUPPORTED;
+    }
+    return HKS_SUCCESS;
+}
+
 static int32_t HksCheckSupportAlgorithm(const struct HksParamSet *paramSet)
 {
     if (paramSet == NULL) {
         return HKS_SUCCESS;
     }
-    int32_t ret = HKS_FAILURE;
-    do {
-        struct HksParam *algParam = NULL;
-        ret = HksGetParam(paramSet, HKS_TAG_ALGORITHM, &algParam);
-        if (ret != HKS_SUCCESS && ret != HKS_ERROR_PARAM_NOT_EXIST) {
-            break;
-        }
-        if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
-            ret = HKS_SUCCESS;
-            break;
-        }
-        uint32_t alg = algParam->uint32Param;
-        if (alg == HKS_ALG_SM2 || alg == HKS_ALG_SM3 || alg == HKS_ALG_SM4) {
-            HKS_LOG_E("SM algorithm not support when HKS_SUPPORT_SM_AIGORITHM is disabled");
-            ret = HKS_ERROR_NOT_SUPPORTED;
-            break;
-        }
-        ret = HksGetParam(paramSet, HKS_TAG_DIGEST, &algParam);
-        if (ret != HKS_SUCCESS && ret != HKS_ERROR_PARAM_NOT_EXIST) {
-            break;
-        }
-        if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
-            ret = HKS_SUCCESS;
-            break;
-        }
-        if (algParam->uint32Param == HKS_DIGEST_SM3) {
-            HKS_LOG_E("SM3 digest not support when HKS_SUPPORT_SM_AIGORITHM is disabled");
-            ret = HKS_ERROR_NOT_SUPPORTED;
-            break;
-        }
-        ret = HKS_SUCCESS;
-    } while (0);
-    return ret;
+    int32_t algRet = HKS_FAILURE;
+    int32_t digRet = HKS_FAILURE;
+    if (algRet == HKS_ERROR_NOT_SUPPORTED || digRet == HKS_ERROR_NOT_SUPPORTED) {
+        return HKS_ERROR_NOT_SUPPORTED;
+    }
+    if (algRet != HKS_SUCCESS || digRet != HKS_SUCCESS) {
+        return HKS_ERROR_INVALID_ARGUMENT;
+    }
+    
+    return HKS_SUCCESS;
 }
 #endif
 
