@@ -115,8 +115,8 @@ static int32_t HksCheckSupportAlgorithm(const struct HksParamSet *paramSet)
     if (paramSet == NULL) {
         return HKS_SUCCESS;
     }
-    int32_t algRet = HKS_FAILURE;
-    int32_t digRet = HKS_FAILURE;
+    int32_t algRet = HksCheckAlg(paramSet);
+    int32_t digRet = HksCheckDigest(paramSet);
     if (algRet == HKS_ERROR_NOT_SUPPORTED || digRet == HKS_ERROR_NOT_SUPPORTED) {
         return HKS_ERROR_NOT_SUPPORTED;
     }
