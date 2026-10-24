@@ -87,6 +87,10 @@ static int32_t HksCheckSupportAlgorithm(const struct HksParamSet *paramSet)
         if (ret != HKS_SUCCESS && ret != HKS_ERROR_PARAM_NOT_EXIST) {
             break;
         }
+        if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+            ret = HKS_SUCCESS;
+            break;
+        }
         uint32_t alg = algParam->uint32Param;
         if (alg == HKS_ALG_SM2 || alg == HKS_ALG_SM3 || alg == HKS_ALG_SM4) {
             HKS_LOG_E("SM algorithm not support when HKS_SUPPORT_SM_AIGORITHM is disabled");
@@ -95,6 +99,10 @@ static int32_t HksCheckSupportAlgorithm(const struct HksParamSet *paramSet)
         }
         ret = HksGetParam(paramSet, HKS_TAG_DIGEST, &algParam);
         if (ret != HKS_SUCCESS && ret != HKS_ERROR_PARAM_NOT_EXIST) {
+            break;
+        }
+        if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+            ret = HKS_SUCCESS;
             break;
         }
         if (algParam->uint32Param == HKS_DIGEST_SM3) {
