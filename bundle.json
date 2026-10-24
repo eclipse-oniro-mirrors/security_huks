@@ -138,6 +138,24 @@
             }
           },
           {
+            "name": "//base/security/huks/interfaces/inner_api/huks_lite:huks_3.0_sdk_kit",
+            "header": {
+              "header_files": [
+                "hks_config_lite_wearable.h",
+                "hks_mbedtls_common.h",
+                "hks_api.h",
+                "hks_param.h",
+                "hks_type.h",
+                "hks_common_check.h"
+              ],
+              "header_base": [
+                "//base/security/huks/interfaces/inner_api/huks_standard/main/include",
+                "//base/security/huks/frameworks/huks_standard/main/common/include",
+                "//base/security/huks/frameworks/huks_standard/main/crypto_engine/mbedtls/include"
+              ]
+            }
+          },
+          {
             "name": "//base/security/huks/interfaces/kits/cj:cj_huks_ffi"
           }
         ],

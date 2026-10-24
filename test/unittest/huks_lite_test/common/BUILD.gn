@@ -19,10 +19,6 @@ config("hilog_dir") {
   include_dirs =
       [ "//base/hiviewdfx/hilog_lite/interfaces/native/innerkits/hilog/" ]
 }
-config("hilog_lite_dir") {
-  include_dirs =
-      [ "//base/hiviewdfx/hilog_lite/interfaces/native/kits/hilog_lite/" ]
-}
 
 config("huks_test_common") {
   include_dirs = [
@@ -64,8 +60,7 @@ ohos_static_library("huks_3.0_test_common") {
       "-Wall",
       "-Werror",
     ]
-    configs += [ ":hilog_lite_dir" ]
-    deps += [ "//base/hiviewdfx/hilog_lite/frameworks/mini:hilog_lite" ]
+    external_deps = [ "hilog_lite:hilog_lite" ]
   } else {
     cflags = [
       "-Wall",
