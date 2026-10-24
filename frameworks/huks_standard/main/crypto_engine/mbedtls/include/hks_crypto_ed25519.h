@@ -29,11 +29,14 @@
 extern "C" {
 #endif
 
+#define ED25519_PRIVATE_KEY_LEN 32
+#define ED25519_PUBLIC_KEY_LEN 32
+
 #if defined(HKS_SUPPORT_ED25519_C) || defined(HKS_SUPPORT_ED25519_GENERATE_KEY)
 int32_t HksEd25519GenerateKey(const struct HksKeySpec *spec, struct HksBlob *keyOut);
 #endif
 
-#if defined(HKS_SUPPORT_ED25519_C) || defined(HKS_SUPPORT_ED2519_GET_PUBLIC_KEY)
+#if defined(HKS_SUPPORT_ED25519_C) || defined(HKS_SUPPORT_ED25519_GET_PUBLIC_KEY)
 int32_t HksGetEd25519PubKey(const struct HksBlob *input, struct HksBlob *output);
 #endif
 

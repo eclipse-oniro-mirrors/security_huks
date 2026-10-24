@@ -56,7 +56,8 @@
         "huks_enable_ukey_config",
         "huks_enable_hisilicon_cipher_in_small",
         "huks_enable_computation_config",
-        "huks_enable_sm_algorithm"
+        "huks_enable_sm_algorithm",
+        "huks_ed25519_use_openhitls"
       ],
       "adapted_system_type": [
           "standard",

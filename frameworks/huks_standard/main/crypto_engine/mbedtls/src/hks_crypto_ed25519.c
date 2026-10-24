@@ -39,8 +39,6 @@
 #include <securec.h>
 
 #define CRYPTO_SUCCESS 1
-#define ED25519_PRIVATE_KEY_LEN 32
-#define ED25519_PUBLIC_KEY_LEN 32
 
 #ifdef HKS_SUPPORT_ED25519_GENERATE_KEY
 static int32_t SaveEd25519KeyMaterial(const struct HksBlob *pubKey, const struct HksBlob *priKey,
@@ -103,7 +101,7 @@ int32_t HksEd25519GenerateKey(const struct HksKeySpec *spec, struct HksBlob *key
 }
 #endif /* HKS_SUPPORT_ED25519_GENERATE_KEY */
 
-#ifdef HKS_SUPPORT_ED2519_GET_PUBLIC_KEY
+#ifdef HKS_SUPPORT_ED25519_GET_PUBLIC_KEY
 int32_t HksGetEd25519PubKey(const struct HksBlob *input, struct HksBlob *output)
 {
     int32_t ret = CheckAsyKeyMaterialSize(HKS_ALG_ED25519, input, output);

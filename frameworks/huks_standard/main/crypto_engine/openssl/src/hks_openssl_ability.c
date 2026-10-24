@@ -104,7 +104,7 @@ static void RegisterAbilityGetPublicKey(void)
 #if defined(HKS_SUPPORT_ML_DSA_C) && defined(HKS_SUPPORT_ML_DSA_GET_PUBLIC_KEY)
     (void)RegisterAbility(HKS_CRYPTO_ABILITY_GET_PUBLIC_KEY(HKS_ALG_ML_DSA), HksOpensslMlDsaGetPubKey);
 #endif
-#if defined(HKS_SUPPORT_ED25519_C) && defined(HKS_SUPPORT_ED2519_GET_PUBLIC_KEY)
+#if defined(HKS_SUPPORT_ED25519_C) && defined(HKS_SUPPORT_ED25519_GET_PUBLIC_KEY)
     (void)RegisterAbility(HKS_CRYPTO_ABILITY_GET_PUBLIC_KEY(HKS_ALG_ED25519), HksOpensslGetEd25519PubKey);
 #endif
 #if defined(HKS_SUPPORT_X25519_C) && defined(HKS_SUPPORT_X25519_GET_PUBLIC_KEY)
