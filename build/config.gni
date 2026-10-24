@@ -114,4 +114,9 @@ declare_args() {
 
   # the config of computation
   huks_enable_computation_config = ""
+  
+  # whether enable SM (Chinese national cryptography) algorithm support.
+  # When disabled, SM2/SM3/SM4 capabilities are trimmed and the closed-source
+  # SM module is not linked; SM algorithm requests return HKS_ERROR_NOT_SUPPORTED.
+  huks_enable_sm_algorithm = true
 }
