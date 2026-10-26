@@ -1360,8 +1360,8 @@ int32_t HksAttestAccessControl(struct HksParamSet *paramSet)
     // HKS_ATTESTATION_MODE_ANONYMOUS no need check permission
     HKS_IF_TRUE_RETURN(HksAttestIsAnonymous(paramSet), HKS_SUCCESS)
 
-    int32_t ret = SensitivePermissionCheck("ohos.permission.ATTEST_KEY");
-    HKS_IF_NOT_SUCC_RETURN(ret, ret)
+    HKS_IF_TRUE_RETURN(SensitivePermissionCheck("ohos.permission.ATTEST_KEY") == HKS_SUCCESS, HKS_SUCCESS);
+
     return SensitivePermissionCheck("ohos.permission.ENTERPRISE_ATTEST_KEY");
 #endif
     (void)paramSet;
