@@ -107,8 +107,6 @@ struct HksParamSet *ParseThreeStageInnerParamSet(enum HksIpcInterfaceCode code, 
         (void)HksGetParamSet(reinterpret_cast<const struct HksParamSet *>(real->data), real->size, &inner);
     } while (false);
     HksFreeParamSet(&wrapper);
-    HKS_LOG_I("ukey unpack three-stage inner %" LOG_PUBLIC "s, msgCode=%" LOG_PUBLIC "u",
-        (inner == nullptr) ? "fail" : "ok", msgCode);
     return inner;
 }
 
@@ -161,14 +159,14 @@ static bool SkipLeadingFieldsForParamSet(enum HksIpcInterfaceCode code, uint32_t
     }
     for (uint32_t i = 0; i < skipBlobs; ++i) {
         if (!SkipBlobInRaw(p, remain, offset)) {
-            HKS_LOG_E("ukey unpack skip blob fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+            HKS_LOG_E("unpack skip blob fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
                 msgCode, offset);
             return false;
         }
     }
     for (uint32_t i = 0; i < skipU32s; ++i) {
         if (!SkipUint32InRaw(remain, offset)) {
-            HKS_LOG_E("ukey unpack skip u32 fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+            HKS_LOG_E("unpack skip u32 fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
                 msgCode, offset);
             return false;
         }
@@ -182,7 +180,7 @@ static bool SkipLeadingFieldsForParamSet(enum HksIpcInterfaceCode code, uint32_t
 static struct HksParamSet *ParseParamSetAtOffset(const uint8_t *p, uint32_t offset, uint32_t remain, uint32_t msgCode)
 {
     HKS_IF_TRUE_LOGE_RETURN(remain - offset < sizeof(struct HksParamSet), nullptr,
-        "ukey unpack paramSet too short, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u remain=%" LOG_PUBLIC "u",
+        "unpack paramSet too short, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u remain=%" LOG_PUBLIC "u",
         msgCode, offset, remain);
 
     const struct HksParamSet *header = reinterpret_cast<const struct HksParamSet *>(p + offset);
@@ -192,9 +190,6 @@ static struct HksParamSet *ParseParamSetAtOffset(const uint8_t *p, uint32_t offs
     }
     struct HksParamSet *paramSet = nullptr;
     (void)HksGetParamSet(header, header->paramSetSize, &paramSet);
-    HKS_LOG_I("ukey unpack paramSet %" LOG_PUBLIC "s, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u"
-        "paramSetSize=%" LOG_PUBLIC "u",
-        (paramSet == nullptr) ? "fail" : "ok", msgCode, offset, header->paramSetSize);
     return paramSet;
 }
 
@@ -215,13 +210,11 @@ struct HksParamSet *UnpackParamSetFromSrcData(uint32_t msgCode, const struct Hks
     const uint8_t *p = srcData.data;
     uint32_t remain = srcData.size;
     if (p == nullptr || remain < sizeof(uint32_t)) {
-        HKS_LOG_E("ukey unpack srcData invalid, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
+        HKS_LOG_E("unpack srcData invalid, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
             msgCode, remain);
         return nullptr;
     }
     enum HksIpcInterfaceCode code = static_cast<enum HksIpcInterfaceCode>(msgCode);
-    HKS_LOG_I("ukey unpack srcData begin, msgCode=%" LOG_PUBLIC "u size=%" LOG_PUBLIC "u",
-        msgCode, remain);
     if (code == HKS_MSG_INIT || code == HKS_MSG_UPDATE || code == HKS_MSG_FINISH || code == HKS_MSG_ABORT) {
         return ParseThreeStageInnerParamSet(code, msgCode, p, remain);
     }
@@ -491,9 +484,6 @@ bool HksIsUkeyStandardMsgCode(uint32_t code, const struct HksBlob &srcData)
     }
     int32_t ukeyRet = 0;
     bool isUkey = (HksCheckIsUkeyOperation(paramSet, &ukeyRet) == HKS_SUCCESS);
-    if (isUkey) {
-        HKS_LOG_I("ukey standard msg, code=%" LOG_PUBLIC "u", code);
-    }
     HksFreeParamSet(&paramSet);
     return isUkey;
 }
