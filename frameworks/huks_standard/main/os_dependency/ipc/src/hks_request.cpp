@@ -108,10 +108,7 @@ bool HksIsUkeyOperationMsg(enum HksIpcInterfaceCode msgCode, const struct HksPar
         msgCode == HKS_MSG_IMPORT_WRAPPED_KEY || msgCode == HKS_MSG_INIT ||
         msgCode == HKS_MSG_UPDATE || msgCode == HKS_MSG_FINISH || msgCode == HKS_MSG_ABORT) {
         int32_t outRet = 0;
-        bool isUkey = (HksCheckIsUkeyOperation(paramSet, &outRet) == HKS_SUCCESS);
-        HKS_IF_NOT_TRUE_LOGI(!isUkey, "ukey client check, code=%" LOG_PUBLIC "u outRet=%" LOG_PUBLIC "d",
-            static_cast<uint32_t>(msgCode), outRet);
-        return isUkey;
+        return (HksCheckIsUkeyOperation(paramSet, &outRet) == HKS_SUCCESS);
     }
     return false;
 }
@@ -441,12 +438,13 @@ int32_t HksSendRequest(enum HksIpcInterfaceCode type, const struct HksBlob *inBl
     HKS_IF_NULL_LOGE_RETURN(proxy, HKS_ERROR_BAD_STATE, "GetHksProxy null");
 
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
-    bool isUkeyOp = HksIsUkeyOperationMsg(type, paramSet);
-    if (isUkeyOp && HksIsUkeyAsyncMsg(type, paramSet)) {
-        HKS_LOG_I("ukey operation mode: ASYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
-        return HksUkeySendAsync(type, data, paramSet, proxy, outBlob);
+    if (HksIsUkeyOperationMsg(type, paramSet)) {
+        if (HksIsUkeyAsyncMsg(type, paramSet)) {
+            HKS_LOG_I("ukey operation mode: ASYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
+            return HksUkeySendAsync(type, data, paramSet, proxy, outBlob);
+        }
+        HKS_LOG_I("ukey operation mode: SYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
     }
-    HKS_IF_NOT_TRUE_LOGI(!isUkeyOp, "ukey operation mode: SYNC, code=%" LOG_PUBLIC "u", static_cast<uint32_t>(type));
 #endif
 
     ret = TryWriteInitDeathCallback(type, data);
