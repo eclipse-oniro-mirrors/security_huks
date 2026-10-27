@@ -362,7 +362,7 @@ int32_t HksCoreInit(const struct  HksBlob *key, const struct HksParamSet *paramS
 
         ret = HksBatchCheck(keyNode);
         if (ret == HKS_SUCCESS) {
-            HKS_LOG_I("HksBatchCheck success");
+            HKS_LOG_I("HksBatchCheck success in init");
             return HKS_SUCCESS;
         }
         if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
@@ -471,7 +471,7 @@ int32_t HksCoreUpdate(const struct HksBlob *handle, const struct HksParamSet *pa
 
         ret = HksBatchCheck(keyNode);
         if (ret == HKS_SUCCESS) {
-            HKS_LOG_I("HksBatchCheck success");
+            HKS_LOG_I("HksBatchCheck success in update");
             ret = HksBatchUpdate(keyNode, paramSet, inData, outData);
             HKS_IF_NOT_SUCC_BREAK(ret)
             HksMarkKeyNodeUnuse(keyNode);

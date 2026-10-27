@@ -696,7 +696,6 @@ static int32_t GenerateAuthTokenKey(void)
         HKS_DEFAULT_USER_AT_MAC_KEY, HKS_DEFAULT_USER_AT_KEY_LEN);
     (void)memcpy_s(g_cachedAuthTokenKey.cipherKey, HKS_KEY_BLOB_AT_KEY_BYTES,
         HKS_DEFAULT_USER_AT_CIPHER_KEY, HKS_DEFAULT_USER_AT_KEY_LEN);
-    HKS_LOG_I("generate At key success!");
     return HKS_SUCCESS;
 }
 
