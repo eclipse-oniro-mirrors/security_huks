@@ -316,6 +316,7 @@ int HksExtStub::OnRemoteRequest(uint32_t code,
         case HKS_MSG_EXT_IMPORT_CERTIFICATE:
         case HKS_MSG_EXT_QUERY_ABILITY_INFO:
         case HKS_MSG_EXT_GET_RESOURCE_ID:
+        case HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY: // new async path: replies with the request code (41)
         case HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY_REPLY: // legacy compat: SET_OR_GET replies with code 42
             return ProcessAsyncReply(data, code);
         default:

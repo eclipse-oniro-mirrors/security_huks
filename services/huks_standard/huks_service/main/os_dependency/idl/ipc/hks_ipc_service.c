@@ -671,6 +671,19 @@ void HksIpcServiceSetOrGetRemoteProperty(const struct HksBlob *srcData,
 #endif
 }
 
+void HksIpcServiceSetOrGetRemotePropertyAsync(const struct HksBlob *srcData, const uint8_t *context)
+{
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
+    // New async path (timeout > 3): the worker task dispatches here with context=null and no
+    // remoteObject. Delegates to the shared 3-param impl; nullptr remoteObject routes the adapter
+    // into the result-slot delivery branch.
+    HksIpcServiceSetOrGetRemoteProperty(srcData, context, NULL);
+#else
+    (void)srcData;
+    (void)context;
+#endif
+}
+
 void HksIpcServiceGetResourceId(const struct HksBlob *srcData, const uint8_t *context)
 {
 #ifdef HKS_UKEY_EXTENSION_CRYPTO

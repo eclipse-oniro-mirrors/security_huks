@@ -64,6 +64,7 @@ const struct HksIpcEntryPoint HKS_IPC_MESSAGE_HANDLER[] = {
     { HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES, HksIpcServiceExportProviderCertificates },
     { HKS_MSG_EXT_EXPORT_CERTIFICATE, HksIpcServiceExportCertificate },
     { HKS_MSG_EXT_IMPORT_CERTIFICATE, HksIpcServiceImportCertificate },
+    { HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY, HksIpcServiceSetOrGetRemotePropertyAsync },
     { HKS_MSG_EXT_GET_RESOURCE_ID, HksIpcServiceGetResourceId },
 
 };

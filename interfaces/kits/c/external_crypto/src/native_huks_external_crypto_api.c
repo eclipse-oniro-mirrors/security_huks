@@ -111,6 +111,8 @@ struct OH_Huks_Result OH_Huks_GetProperty(const struct OH_Huks_Blob *resourceId,
         (const struct HksParamSet *)paramSetIn, &innerOut);
     if (ret == HKS_SUCCESS) {
         *paramSetOut = (struct OH_Huks_ExternalCryptoParamSet *)innerOut;
+    } else {
+        HksFreeParamSet(&innerOut);
     }
     return ConvertApiResult(ret);
 }

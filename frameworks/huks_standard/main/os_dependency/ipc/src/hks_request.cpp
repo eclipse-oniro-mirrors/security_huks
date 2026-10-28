@@ -41,10 +41,11 @@ static volatile std::atomic_bool g_isInitBundleDead = false;
 constexpr uint32_t DEFAULT_TIME = 2;
 sptr<Security::Hks::HksStub> g_hks_callback;
 
-#ifdef HKS_UKEY_EXTENSION_CRYPTO
 // ukey async request timeout cap (s): uniform default 60s; a business may raise it up to the
-// 15-minute hard limit.
+// 15-minute hard limit. Also used by HksExtSendAsyncMessage (compiled regardless of
+// HKS_UKEY_EXTENSION_CRYPTO) to validate the set/get timeout range.
 constexpr uint32_t HKS_UKEY_ASYNC_MAX_TIMEOUT = 900;
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
 // Uniform default when no timeout tag is set (s) — aligned with the Extension-side JS callback
 // wait default.
 constexpr uint32_t HKS_UKEY_ASYNC_DEFAULT_TIMEOUT = 60;
@@ -334,8 +335,11 @@ static int32_t HksExtSendAsyncMessage(MessageParcel &data,
             HKS_ERROR_INVALID_ARGUMENT, "timeout tag type invalid");
 
         uint32_t val = timeoutParam->uint32Param;
-        HKS_IF_TRUE_LOGE_RETURN(val > 3 || val == 0, HKS_ERROR_INVALID_ARGUMENT,
-            "timeout %" LOG_PUBLIC "u not supported, must between 0 - 3", val);
+        // set/get client is path-agnostic: the server routes by timeout value (<=3 legacy,
+        // >3 thread-pool). The client just sends and parses the reply uniformly.
+        HKS_IF_TRUE_LOGE_RETURN(val == 0 || val > HKS_UKEY_ASYNC_MAX_TIMEOUT, HKS_ERROR_INVALID_ARGUMENT,
+            "timeout %" LOG_PUBLIC "u not supported, must be in [1, %" LOG_PUBLIC "u]",
+            val, HKS_UKEY_ASYNC_MAX_TIMEOUT);
 
         timeout = val;
     }

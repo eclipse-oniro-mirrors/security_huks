@@ -245,10 +245,10 @@ static bool TrySubmitUkeyAsyncIfMatch(uint32_t code, MessageParcel &data, uint32
         case HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES:
         case HKS_MSG_EXT_EXPORT_CERTIFICATE:
         case HKS_MSG_EXT_IMPORT_CERTIFICATE:
-        // SET_OR_GET_REMOTE_PROPERTY is excluded (both old and new clients write a callback,
-        // so dual-mode cannot be judged; the adapter's direct-reply style conflicts with the
-        // unified delivery protocol) — its existing dedicated branch is kept (the legacy path
-        // below)
+        case HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY:
+        // SET_OR_GET_REMOTE_PROPERTY is routed by the submit module: timeout > 3 submits to the
+        // thread pool (new path), timeout <= 3 returns false and falls through to the legacy inline
+        // path below (ProcessAsyncReplyMessage -> 3-param handler).
         case HKS_MSG_EXT_QUERY_ABILITY_INFO:
         case HKS_MSG_EXT_GET_RESOURCE_ID:
             isUkeyMsg = true;
@@ -364,6 +364,20 @@ static void ProcessRemoteRequest(uint32_t code, MessageParcel &data, MessageParc
         // ProcessAttestOrNormalMessage (TrySubmit must precede the INIT block, otherwise the
         // callback is consumed early); only the other two (anonymous attestation / SET_OR_GET)
         // are handled here.
+#ifdef HKS_UKEY_EXTENSION_CRYPTO
+        // set/get routing: timeout > 3 -> TrySubmitUkeyAsyncIfMatch consumes the callback and
+        // submits to the thread pool; timeout <= 3 -> returns false without touching the parcel,
+        // then the callback is read here and dispatched to the legacy ProcessAsyncReplyMessage.
+        if (code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY) {
+            if (TrySubmitUkeyAsyncIfMatch(code, data, outSize, srcData, reply)) {
+                ret = HKS_SUCCESS; // admission receipt (callback consumed by the submit module)
+                break;
+            }
+            sptr<IRemoteObject> remoteObject = data.ReadRemoteObject();
+            ret = ProcessAsyncReplyMessage(code, srcData, reply, remoteObject);
+            break;
+        }
+#endif
         bool isAsyncReply = (code == HKS_MSG_ATTEST_KEY_ASYNC_REPLY ||
             code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY);
         if (isAsyncReply) {
