@@ -152,7 +152,7 @@ HWTEST_F(HksCryptoHalCurve25519Key, HksCryptoHalCurve25519Key_003, Function | Sm
 }
 #endif
 
-#if defined(HKS_SUPPORT_ED25519_C) && defined(HKS_SUPPORT_ED2519_GET_PUBLIC_KEY)
+#if defined(HKS_SUPPORT_ED25519_C) && defined(HKS_SUPPORT_ED25519_GET_PUBLIC_KEY)
 /**
  * @tc.number    : HksCryptoHalCurve25519Key_004
  * @tc.name      : HksCryptoHalCurve25519Key_004

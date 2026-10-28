@@ -49,6 +49,9 @@ declare_args() {
   # specify the path of OpenSSL huks depends on
   huks_dependency_openssl_path = ""
 
+  # whether use OpenHiTLS as the ED25519 provider on mini system
+  huks_ed25519_use_openhitls = false
+
   # specify the uid white list for change key owner
   huks_uid_trust_list_define = "{}"
 

@@ -137,7 +137,6 @@ if (defined(ohos_kernel_type) && ohos_kernel_type == "liteos_m") {
       sources += [
         "../../../frameworks/huks_standard/main/crypto_engine/crypto_common/src/hks_core_ability.c",
         "../../../frameworks/huks_standard/main/crypto_engine/crypto_common/src/hks_core_get_main_key.c",
-        "../../../frameworks/huks_standard/main/crypto_engine/mbedtls/src/hks_crypto_ed25519.c",
         "../../../frameworks/huks_standard/main/crypto_engine/mbedtls/src/hks_mbedtls_3des.c",
         "../../../frameworks/huks_standard/main/crypto_engine/mbedtls/src/hks_mbedtls_ability.c",
         "../../../frameworks/huks_standard/main/crypto_engine/mbedtls/src/hks_mbedtls_aes.c",
@@ -245,6 +244,23 @@ if (defined(ohos_kernel_type) && ohos_kernel_type == "liteos_m") {
       "LOG_ENGINE_HILOG_MODULE_SCY",
       "HUKS_LOG_MINI_EXT_ENABLED",
     ]
+
+    if (huks_ed25519_use_openhitls) {
+      sources += [
+        "../../../frameworks/huks_standard/main/crypto_engine/hitls/src/hks_hitls_ed25519.c",
+      ]
+      defines += [ "HKS_MINI_OPENHITLS_ED25519" ]
+      include_dirs += [
+        "//third_party/openhitls/include/crypto",
+        "//third_party/openhitls/include/bsl",
+      ]
+      deps += [ "//third_party/openhitls:openhitls_crypto" ]
+    } else if (huks_use_mbedtls) {
+      sources += [
+        "../../../frameworks/huks_standard/main/crypto_engine/mbedtls/src/hks_crypto_ed25519.c",
+      ]
+    }
+
     if (product_name == "wifiiot_hispark_pegasus") {
       defines += [ "USE_HISI_MBED" ]
     }
