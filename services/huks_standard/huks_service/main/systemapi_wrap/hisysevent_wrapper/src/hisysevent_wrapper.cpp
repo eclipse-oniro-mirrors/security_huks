@@ -66,7 +66,7 @@ int WriteEvent(enum EventType eventType, const char *functionName, const struct 
 
     ret = HiSysEventWrite(HiSysEvent::Domain::HUKS, g_eventName,
         outEventType, g_tagFunction, functionName, g_tagUserId, eventValues->userId, g_tagProcessUID,
-        eventValues->processName, g_tagKeyType, eventValues->keyType, g_tagErrorCode, eventValues->errorCode,
+        eventValues->processAppUid, g_tagKeyType, eventValues->keyType, g_tagErrorCode, eventValues->errorCode,
         g_tagExtra, extra);
     return ret;
 }

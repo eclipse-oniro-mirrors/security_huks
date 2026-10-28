@@ -51,7 +51,7 @@ typedef struct {
 } DcmAnonymousResponse;
 
 typedef struct {
-    uint32_t callingUid;
+    uint32_t callingAppUid;
     uint32_t curUTCTime;
     uint32_t tokenID;
     uint32_t remainValidatePeriod;

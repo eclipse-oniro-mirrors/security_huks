@@ -186,14 +186,14 @@ void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlo
 
 static int32_t GetUidAndUserId(const struct HksParamSet *paramSet, int &uid, int &userId)
 {
-    auto callingUid = IPCSkeleton::GetCallingUid();
-    uid = callingUid;
-    userId = HksGetOsAccountIdFromUid(callingUid);
+    auto callingAppUid = IPCSkeleton::GetCallingUid();
+    uid = callingAppUid;
+    userId = HksGetOsAccountIdFromUid(callingAppUid);
     HKS_IF_NULL_RETURN(paramSet, HKS_SUCCESS)
 
     struct HksParam *ancoUidParam = nullptr;
     int32_t ret = HksGetParam(paramSet, HKS_TAG_ANCO_APP_UID, &ancoUidParam);
-    if (callingUid == HKS_ANCO_BROKER_UID) {
+    if (callingAppUid == HKS_ANCO_BROKER_UID) {
         HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get HKS_TAG_ANCO_APP_UID failed, ret: %" LOG_PUBLIC "d", ret)
         HKS_IF_NOT_TRUE_LOGE_RETURN(ancoUidParam->blob.size == sizeof(int), HKS_ERROR_NEW_INVALID_ARGUMENT,
             "uid size should be sizeof(int)")
@@ -206,7 +206,7 @@ static int32_t GetUidAndUserId(const struct HksParamSet *paramSet, int &uid, int
         userId = static_cast<int>(ancoUserIdParam->uint32Param);
     } else {
         HKS_IF_TRUE_LOGE_RETURN(ret != HKS_ERROR_PARAM_NOT_EXIST, HKS_ERROR_NEW_INVALID_ARGUMENT,
-            "not allowed to add anco tag for non-broker invoker, processName: %" LOG_PUBLIC "d", callingUid)
+            "not allowed to add anco tag for non-broker invoker, processName: %" LOG_PUBLIC "d", callingAppUid)
     }
     return HKS_SUCCESS;
 }

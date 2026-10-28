@@ -211,17 +211,17 @@ int32_t HksGetProcessInfoForIPC(struct HksProcessInfo *processInfo)
         return HKS_SUCCESS;
     }
 
-    auto callingUid = OHOS::IPCSkeleton::GetCallingUid();
-    uint8_t *name = static_cast<uint8_t *>(HksMalloc(sizeof(callingUid)));
+    auto callingAppUid = OHOS::IPCSkeleton::GetCallingUid();
+    uint8_t *name = static_cast<uint8_t *>(HksMalloc(sizeof(callingAppUid)));
     HKS_IF_NULL_LOGE_RETURN(name, HKS_ERROR_MALLOC_FAIL, "GetProcessName malloc failed.")
 
-    (void)memcpy_s(name, sizeof(callingUid), &callingUid, sizeof(callingUid));
-    processInfo->processName.size = sizeof(callingUid);
+    (void)memcpy_s(name, sizeof(callingAppUid), &callingAppUid, sizeof(callingAppUid));
+    processInfo->processName.size = sizeof(callingAppUid);
     processInfo->processName.data = name;
-    processInfo->uidInt = callingUid;
+    processInfo->uidInt = callingAppUid;
 
     int32_t userId = -1;
-    (void)OHOS::AccountSA::OsAccountManager::GetOsAccountLocalIdFromUid(callingUid, userId);
+    (void)OHOS::AccountSA::OsAccountManager::GetOsAccountLocalIdFromUid(callingAppUid, userId);
     uint32_t size;
     if (userId == 0) {
         size = strlen("0");

@@ -200,9 +200,9 @@ int32_t HksCheckAcrossAccountsPermission(const struct HksParamSet *paramSet, int
     ret = SensitivePermissionCheck("ohos.permission.INTERACT_ACROSS_LOCAL_ACCOUNTS");
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check interact across local accounts permission failed")
 
-    auto callingUid = IPCSkeleton::GetCallingUid();
+    auto callingAppUid = IPCSkeleton::GetCallingUid();
     for (uint32_t i = 0; i < HKS_ARRAY_SIZE(g_trustedUid); i++) {
-        if (callingUid == g_trustedUid[i]) {
+        if (callingAppUid == g_trustedUid[i]) {
             return HKS_SUCCESS;
         }
     }

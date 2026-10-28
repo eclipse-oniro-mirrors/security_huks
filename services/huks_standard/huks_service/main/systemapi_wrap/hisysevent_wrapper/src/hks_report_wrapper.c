@@ -159,17 +159,17 @@ int32_t ReportFaultEvent(const char *funcName, const struct HksProcessInfo *proc
         // userId is 0 if no userId
         uint32_t userId = 0;
 
-        // processName is 0 if no processName
-        int processName = 0;
+        // processAppUid is 0 if no processAppUid
+        int processAppUid = 0;
         if (processInfo != NULL) {
             userId = processInfo->userIdInt;
-            if (memcpy_s(&processName, sizeof(processName), processInfo->processName.data,
+            if (memcpy_s(&processAppUid, sizeof(processAppUid), processInfo->processName.data,
                 processInfo->processName.size) != EOK) {
-                HKS_LOG_E("process name is no int, default as 0");
-                processName = 0;
+                HKS_LOG_E("process appUid is no int, default as 0");
+                processAppUid = 0;
             }
         }
-        struct EventValues eventValues = { userId, processName, algorithmTag, errorCode };
+        struct EventValues eventValues = { userId, processAppUid, algorithmTag, errorCode };
         ret = WriteEvent(FAULT, funcName, &eventValues, extra);
     } while (0);
     HKS_FREE(extra);

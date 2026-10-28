@@ -45,7 +45,7 @@ HKS_TAG_PARAM0_BUFFER -> function
 HKS_TAG_PARAM1_UINT32 -> operation
 HKS_TAG_PARAM1_BUFFER -> time
 HKS_TAG_PARAM2_BUFFER -> processName
-HKS_TAG_PARAM2_UINT32 -> processUid
+HKS_TAG_PARAM2_UINT32 -> processAppUid
 HKS_TAG_PARAM3_BUFFER -> result
 HKS_TAG_PARAM3_UINT32 -> timeCost
 HKS_TAG_PARAM0_NULL -> errorMsg
@@ -273,8 +273,8 @@ static enum HksCallerType GetCallerType(void)
 
 int32_t ReportGetCallerName(const struct HksProcessInfo *processInfo, std::string &callerName)
 {
-    auto callingUid = OHOS::IPCSkeleton::GetCallingUid();
-    if (callingUid == HKS_ANCO_BROKER_UID && processInfo != nullptr) {
+    auto callingAppUid = OHOS::IPCSkeleton::GetCallingUid();
+    if (callingAppUid == HKS_ANCO_BROKER_UID && processInfo != nullptr) {
 #ifdef HKS_SUPPORT_GET_BUNDLE_INFO
         // Failed to get the real bundle name, fall back to reporting the broker identity for caller tracing
         int32_t ret = HksGetBundleNameFromUid(processInfo->uidInt, callerName);

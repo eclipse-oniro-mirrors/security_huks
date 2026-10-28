@@ -128,8 +128,8 @@ static int32_t Invoke(IServerProxy *iProxy, int funcId, void *origin, IpcIo *req
 
     int32_t ret = HKS_FAILURE;
 
-    uint32_t callingUid = GetCallingUid();
-    HksIpcContext ipcContext = { reply, callingUid };
+    uint32_t callingAppUid = GetCallingUid();
+    HksIpcContext ipcContext = { reply, callingAppUid };
 
     struct HksBlob srcData = { 0 };
     struct HksBlob outData = { 0 };

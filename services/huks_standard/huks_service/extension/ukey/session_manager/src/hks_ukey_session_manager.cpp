@@ -244,7 +244,7 @@ int32_t HksSessionManager::HksGetHandleInfo(const HksProcessInfo &processInfo, c
     HandleInfo infoNew{};
     HKS_IF_TRUE_LOGE_RETURN(!m_handlers.Find(handle, infoNew), HKS_ERROR_NOT_EXIST, "Find handle failed")
     HKS_IF_TRUE_LOGE_RETURN(infoNew.m_uid != processInfo.uidInt, HKS_ERROR_NOT_EXIST,
-        "uid not crrect. infoUid: %" LOG_PUBLIC "d, processUid: %" LOG_PUBLIC "d", infoNew.m_uid, processInfo.uidInt)
+        "uid not crrect. infoUid: %" LOG_PUBLIC "d, processAppUid: %" LOG_PUBLIC "d", infoNew.m_uid, processInfo.uidInt)
     infos = std::move(infoNew);
     return HKS_SUCCESS;
 }

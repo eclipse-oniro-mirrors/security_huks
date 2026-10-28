@@ -77,16 +77,16 @@ int32_t HksGetProcessInfoForIPC(const struct HksParamSet *paramSet,
         return HKS_SUCCESS;
     }
     HksIpcContext *ipcContext = (HksIpcContext *)context;
-    uint32_t callingUid = (uint32_t)(ipcContext->callingUid);
+    uint32_t callingAppUid = (uint32_t)(ipcContext->callingAppUid);
     uint8_t *name = NULL;
     uint8_t *userId = NULL;
     int32_t ret = HKS_ERROR_MALLOC_FAIL;
     do {
-        name = (uint8_t *)HksMalloc(sizeof(callingUid));
+        name = (uint8_t *)HksMalloc(sizeof(callingAppUid));
         HKS_IF_NULL_LOGE_BREAK(name, "GetProcessName malloc failed.")
-        (void)memcpy_s(name, sizeof(callingUid), &callingUid, sizeof(callingUid));
+        (void)memcpy_s(name, sizeof(callingAppUid), &callingAppUid, sizeof(callingAppUid));
         processInfo->processName.data = name;
-        processInfo->processName.size = sizeof(callingUid);
+        processInfo->processName.size = sizeof(callingAppUid);
 
         userId = (uint8_t *)HksMalloc(strlen(g_userId));
         HKS_IF_NULL_LOGE_BREAK(userId, "GetProcessUserId malloc failed.")

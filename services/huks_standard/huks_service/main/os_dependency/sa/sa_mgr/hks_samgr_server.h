@@ -34,7 +34,7 @@
 
 typedef struct {
     IpcIo *reply;
-    uint32_t callingUid;
+    uint32_t callingAppUid;
 } HksIpcContext;
 
 typedef struct {

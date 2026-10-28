@@ -176,7 +176,7 @@ ENABLE_CFI(int32_t DcmLocalGenerateCertChain(const struct HksProcessInfo *proces
     uint64_t timestapSe = 0;
     int32_t ret = HksGetCurTime(&timestapSe);
     DcmApplyAnonymousRequest request = {
-        .callingUid = processInfo->uidInt,
+        .callingAppUid = processInfo->uidInt,
         .curUTCTime = timestapSe,
         .tokenID = processInfo->accessTokenId,
         .remainValidatePeriod = HKS_DCM_VALID_TIME_SECONDS,
