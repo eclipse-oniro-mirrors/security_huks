@@ -317,28 +317,28 @@ int32_t RecordKeyOperation(uint32_t operation, const struct HksStoreMaterial *ma
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get anonymous key alias failed");
 #ifdef L2_STANDARD
     if (IsGroupKeyMaterial(material)) {
-        HKS_LOG_I("developer: %" LOG_PUBLIC "s, group: %" LOG_PUBLIC "s",
+        HKS_LOG_I_NO_FUNC("developer: %" LOG_PUBLIC "s, group: %" LOG_PUBLIC "s",
             material->developerId, material->assetAccessGroup);
     }
 #endif
     switch (operation) {
         case KEY_OPERATION_SAVE:
-            HKS_LOG_I("gen, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
+            HKS_LOG_I_NO_FUNC("gen, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
                 "level: %" LOG_PUBLIC "u, key: %" LOG_PUBLIC "s",
                 material->userIdPath, material->uidPath, material->pathType, anonymousKeyAlias);
             break;
         case KEY_OPERATION_GET:
-            HKS_LOG_I("use, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
+            HKS_LOG_I_NO_FUNC("use, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
                 "level: %" LOG_PUBLIC "u, key: %" LOG_PUBLIC "s",
                 material->userIdPath, material->uidPath, material->pathType, anonymousKeyAlias);
             break;
         case KEY_OPERATION_DELETE:
-            HKS_LOG_I("del, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
+            HKS_LOG_I_NO_FUNC("del, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
                 "level: %" LOG_PUBLIC "u, key: %" LOG_PUBLIC "s",
                 material->userIdPath, material->uidPath, material->pathType, anonymousKeyAlias);
             break;
         case KEY_OPERATION_CHECK:
-            HKS_LOG_I("chk, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
+            HKS_LOG_I_NO_FUNC("chk, userid: %" LOG_PUBLIC "s, uid: %" LOG_PUBLIC "s, "
                 "level: %" LOG_PUBLIC "u, key: %" LOG_PUBLIC "s",
                 material->userIdPath, material->uidPath, material->pathType, anonymousKeyAlias);
             break;

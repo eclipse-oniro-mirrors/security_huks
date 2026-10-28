@@ -81,6 +81,24 @@
             } while (0)
         #define HKS_LOG_D(fmt, arg...) \
             HILOG_DEBUG(LOG_ENGINE, "%" LOG_PUBLIC "s: " fmt "\n", __func__, ##arg)
+        
+        /* no function name */
+        #define HKS_LOG_I_NO_FUNC(fmt, arg...) \
+            HILOG_INFO(LOG_ENGINE, fmt "\n", ##arg)
+        #define HKS_LOG_W_NO_FUNC(fmt, arg...) \
+            HILOG_WARN(LOG_ENGINE, fmt "\n", ##arg)
+        #define HKS_LOG_E_NO_FUNC(fmt, arg...) \
+            do { \
+                HILOG_ERROR(LOG_ENGINE, fmt "\n", ##arg); \
+                HksLog(HKS_LOG_LEVEL_E, fmt, ##arg); \
+            } while (0)
+        #define HKS_LOG_I_IMPORTANT_NO_FUNC(fmt, arg...) \
+            do { \
+                HILOG_INFO(LOG_ENGINE, fmt "\n", ##arg); \
+                HksLog(HKS_LOG_LEVEL_E_IMPORTANT, fmt, ##arg); \
+            } while (0)
+        #define HKS_LOG_D_NO_FUNC(fmt, arg...) \
+            HILOG_DEBUG(LOG_ENGINE, fmt "\n", ##arg)
     #else // L2_STANDARD
         #define HKS_LOG_I(fmt, arg...) do {                                                                         \
             struct timespec _ts;                                                                                    \
@@ -112,6 +130,12 @@
             uint32_t _ms = (uint32_t)((long long)_ts.tv_sec * 1000LL + _ts.tv_nsec / 1000000LL);                    \
             HILOG_DEBUG(LOG_ENGINE, "HUKS_D_%" LOG_PUBLIC "u:" fmt "\n", _ms, ##arg);    \
         } while (0)
+
+        #define HKS_LOG_I_NO_FUNC HKS_LOG_I
+        #define HKS_LOG_W_NO_FUNC HKS_LOG_W
+        #define HKS_LOG_E_NO_FUNC HKS_LOG_E
+        #define HKS_LOG_I_IMPORTANT_NO_FUNC HKS_LOG_I
+        #define HKS_LOG_D_NO_FUNC HKS_LOG_D
     #endif // L2_STANDARD
 
 #else // _HUKS_LOG_ENABLE_
@@ -120,6 +144,11 @@
     #define HKS_LOG_E(...)
     #define HKS_LOG_E_IMPORTANT(...)
     #define HKS_LOG_D(...)
+    #define HKS_LOG_I_NO_FUNC(...)
+    #define HKS_LOG_W_NO_FUNC(...)
+    #define HKS_LOG_E_NO_FUNC(...)
+    #define HKS_LOG_I_IMPORTANT_NO_FUNC(...)
+    #define HKS_LOG_D_NO_FUNC(...)
 #endif //_HUKS_LOG_ENABLE_
 
 #endif /* HKS_LOG_H */
