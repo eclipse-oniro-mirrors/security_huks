@@ -169,7 +169,7 @@ static int32_t FileRead(const char *fileName, uint32_t offset, struct HksBlob *b
     char mTime[FILE_TIME_LEN] = {0};
     UnixToString(cTime, fileStat.st_ctime, "%m-%d %H:%M:%S");
     UnixToString(mTime, fileStat.st_mtime, "%m-%d %H:%M:%S");
-    HKS_LOG_I("File ctime: %" LOG_PUBLIC "s, mtime: %" LOG_PUBLIC "s", cTime, mTime);
+    HKS_LOG_I_NO_FUNC("File ctime: %" LOG_PUBLIC "s, mtime: %" LOG_PUBLIC "s", cTime, mTime);
 
     uint32_t len = fread(blob->data, 1, blob->size, fp);
     if (fclose(fp) < 0) {

@@ -389,11 +389,11 @@ static std::string GetTimeoutMonitorMarkTag(uint32_t code, uint32_t callingAppUi
 static void ReportCostTime(uint64_t enterTime, uint64_t leaveTime, uint32_t sessionId, int32_t reply)
 {
     if (leaveTime >= enterTime) {
-        HKS_LOG_I("cost %" LOG_PUBLIC PRIu64 " ms, sessionId = %" LOG_PUBLIC "u, ret:%" LOG_PUBLIC "d",
+        HKS_LOG_I_NO_FUNC("cost %" LOG_PUBLIC PRIu64 " ms, session = %" LOG_PUBLIC "u, ret:%" LOG_PUBLIC "d",
             leaveTime - enterTime, sessionId, reply);
     } else {
-        HKS_LOG_E("time error. diff: %" LOG_PUBLIC PRIu64 " ms, sessionId = %" LOG_PUBLIC "u, ret:%" LOG_PUBLIC "d",
-            enterTime - leaveTime, sessionId, reply);
+        HKS_LOG_E_NO_FUNC("time error. diff: %" LOG_PUBLIC PRIu64 " ms, sessionId = %" LOG_PUBLIC "u, ret:%" LOG_PUBLIC
+            "d", enterTime - leaveTime, sessionId, reply);
     }
 }
 
@@ -414,8 +414,8 @@ int HksService::OnRemoteRequest(uint32_t code, MessageParcel &data, MessageParce
         HiviewDFX::XCOLLIE_FLAG_LOG);
 #endif
 
-    HKS_LOG_I("code:%" LOG_PUBLIC "u, callingAppUid = %" LOG_PUBLIC "d, userId = %" LOG_PUBLIC
-        "d, sessionId = %" LOG_PUBLIC "u", code, callingAppUid, userId, currentSessionId);
+    HKS_LOG_I_NO_FUNC("code:%" LOG_PUBLIC "u, caller = %" LOG_PUBLIC "d, user = %" LOG_PUBLIC "d, session = %"
+        LOG_PUBLIC "u", code, callingAppUid, userId, currentSessionId);
 
 #ifdef HUKS_ENABLE_UPGRADE_KEY_STORAGE_SECURE_LEVEL
     // judge whether is upgrading, wait for upgrade finished
