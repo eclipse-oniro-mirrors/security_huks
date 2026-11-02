@@ -112,6 +112,7 @@ if (os_level == "standard") {
       "access_token:libtokenid_sdk",
       "c_utils:utils",
       "ipc:ipc_single",
+      "init:libbegetutil",
     ]
 
     defines = []

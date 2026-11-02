@@ -91,6 +91,12 @@ static uint8_t g_deviceIdOid[] = {
 static uint8_t g_appIdOid[] = {
     0x06, 0x0d, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x8f, 0x5b, 0x02, 0x82, 0x78, 0x02, 0x01, 0x03
 };
+static uint8_t g_osDistVersionOid[] = {
+    0x06, 0x0e, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x8f, 0x5b, 0x02, 0x82, 0x78, 0x02, 0x02, 0x02, 0x06
+};
+static uint8_t g_osDistApiVersionOid[] = {
+    0x06, 0x0e, 0x2b, 0x06, 0x01, 0x04, 0x01, 0x8f, 0x5b, 0x02, 0x82, 0x78, 0x02, 0x02, 0x02, 0x07
+};
 
 static const struct HksParam g_oidParams[] = {
     {
@@ -134,6 +140,18 @@ static const struct HksParam g_oidParams[] = {
         .blob = {
             .size = sizeof(g_appIdOid),
             .data = g_appIdOid
+        }
+    }, {
+        .tag = HKS_TAG_ATTESTATION_OS_VERSION,
+        .blob = {
+            .size = sizeof(g_osDistVersionOid),
+            .data = g_osDistVersionOid
+        }
+    }, {
+        .tag = HKS_TAG_ATTESTATION_API_VERSION,
+        .blob = {
+            .size = sizeof(g_osDistApiVersionOid),
+            .data = g_osDistApiVersionOid
         }
     },
 };

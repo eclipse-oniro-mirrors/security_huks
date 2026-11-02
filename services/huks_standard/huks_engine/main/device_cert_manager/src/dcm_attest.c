@@ -77,6 +77,16 @@ DECLARE_OID(hksOsVersion);
 DECLARE_TAG(hksSecInfo, ID_SYSTEM_PROPERTIY_OS_SEC_INFO);
 DECLARE_OID(hksSecInfo);
 
+#define ID_SYSTEM_PROPERTIY_OS_DIST_VERSION        ID_SYSTEM_PROPERTIY_OS, 0x06
+#define ID_SYSTEM_PROPERTIY_OS_DIST_VERSION_SIZE   (ID_SYSTEM_PROPERTIY_OS_SIZE + 1)
+DECLARE_TAG(hksOsDistVersion, ID_SYSTEM_PROPERTIY_OS_DIST_VERSION);
+DECLARE_OID(hksOsDistVersion);
+ 
+#define ID_SYSTEM_PROPERTIY_OS_DIST_API_VERSION        ID_SYSTEM_PROPERTIY_OS, 0x07
+#define ID_SYSTEM_PROPERTIY_OS_DIST_API_VERSION_SIZE   (ID_SYSTEM_PROPERTIY_OS_SIZE + 1)
+DECLARE_TAG(hksOsDistApiVersion, ID_SYSTEM_PROPERTIY_OS_DIST_API_VERSION);
+DECLARE_OID(hksOsDistApiVersion);
+
 #define ID_PRIVACY_PROPERTIES       ID_SYSTEM_PROPERTIES, 0x04
 #define ID_PRIVACY_PROPERTIES_SIZE      (ID_SYSTEM_PROPERTIES_SIZE + 1)
 
@@ -338,6 +348,8 @@ static enum HksTag g_idAttestList[] = {
     HKS_TAG_ATTESTATION_ID_UDID,
     HKS_TAG_ATTESTATION_ID_SEC_LEVEL_INFO,
     HKS_TAG_ATTESTATION_ID_VERSION_INFO,
+    HKS_TAG_ATTESTATION_OS_VERSION,
+    HKS_TAG_ATTESTATION_API_VERSION,
 };
 
 static inline uint32_t GetYearIndex(uint32_t year)
@@ -1331,6 +1343,10 @@ static int32_t InsertIdOrSecInfoByOid(enum HksTag tagOne, enum HksTag tagTwo,
             return InsertIdOrSecInfoData(tagOne, ASN_1_TAG_TYPE_OCT_STR, &hksSecInfoOid, out, paramSet);
         case HKS_TAG_ATTESTATION_ID_VERSION_INFO:
             return InsertIdOrSecInfoData(tagOne, ASN_1_TAG_TYPE_OCT_STR, &hksOsVersionOid, out, paramSet);
+        case HKS_TAG_ATTESTATION_OS_VERSION:
+            return InsertIdOrSecInfoData(tagOne, ASN_1_TAG_TYPE_UTF8_STR, &hksOsDistVersionOid, out, paramSet);
+        case HKS_TAG_ATTESTATION_API_VERSION:
+            return InsertIdOrSecInfoData(tagOne, ASN_1_TAG_TYPE_UTF8_STR, &hksOsDistApiVersionOid, out, paramSet);
         default:
             break;
     }
