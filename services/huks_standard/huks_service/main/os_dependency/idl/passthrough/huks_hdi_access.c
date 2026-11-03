@@ -35,6 +35,10 @@
 #include "hks_template.h"
 #include "hks_cfi.h"
 #include "hks_check_paramset.h"
+#include "hks_param.h"
+#include "parameter.h"
+ 
+#define MAX_OS_VERSION_LEN 64
 
 enum HdiVersion {
     INVALID = 0,
@@ -734,6 +738,95 @@ ENABLE_CFI(int32_t HuksAccessUpgradeKey(const struct HksBlob *oldKey, const stru
 #endif
 
 #ifdef HKS_SUPPORT_API_ATTEST_KEY
+static int32_t GetOsDistVersion(char *osVersion, uint32_t osVersionLen, char *apiVersion, uint32_t apiVersionLen)
+{
+    int osRet = GetParameter("const.product.os.dist.version", "", osVersion, osVersionLen);
+    HKS_IF_TRUE_LOGE_RETURN(osRet <= 0, HKS_FAILURE, "get os version fail or empty.");
+
+    HKS_LOG_I("get os dist version: %" LOG_PUBLIC "s", osVersion);
+
+    osRet = GetParameter("const.product.os.dist.apiversion", "", apiVersion, apiVersionLen);
+    HKS_IF_TRUE_LOGE_RETURN(osRet <= 0, HKS_FAILURE, "get api version fail or empty.");
+
+    HKS_LOG_I("get os dist api version: %" LOG_PUBLIC "s", apiVersion);
+    return HKS_SUCCESS;
+}
+
+static bool IsTagInStripList(uint32_t tag)
+{
+    static const uint32_t tagsToStrip[] = {
+        HKS_TAG_ATTESTATION_OS_VERSION,
+        HKS_TAG_ATTESTATION_API_VERSION
+    };
+    for (uint32_t i = 0; i < HKS_ARRAY_SIZE(tagsToStrip); ++i) {
+        if (tag == tagsToStrip[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int32_t CopyParamsExceptStripTags(const struct HksParamSet *paramSetIn, struct HksParamSet *newParamSet)
+{
+    for (uint32_t i = 0; i < paramSetIn->paramsCnt; ++i) {
+        if (IsTagInStripList(paramSetIn->params[i].tag)) {
+            continue;
+        }
+        int32_t ret = HksAddParams(newParamSet, &paramSetIn->params[i], 1);
+        HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "copy existing param fail, index:%d", i);
+    }
+    return HKS_SUCCESS;
+}
+
+static int32_t InjectOsDistTags(const struct HksParamSet *paramSetIn, struct HksParamSet **paramSetOut)
+{
+    struct HksParam *modeParam = NULL;
+    if (HksGetParam(paramSetIn, HKS_TAG_ATTESTATION_MODE, &modeParam) == HKS_SUCCESS &&
+        modeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS) {
+        return HksGetParamSet(paramSetIn, paramSetIn->paramSetSize, paramSetOut);
+    }
+
+    char osVersion[MAX_OS_VERSION_LEN] = {0};
+    char apiVersion[MAX_OS_VERSION_LEN] = {0};
+    if (GetOsDistVersion(osVersion, MAX_OS_VERSION_LEN, apiVersion, MAX_OS_VERSION_LEN) != HKS_SUCCESS) {
+        return HksGetParamSet(paramSetIn, paramSetIn->paramSetSize, paramSetOut);
+    }
+
+    struct HksParamSet *newParamSet = NULL;
+    int32_t ret = HksInitParamSet(&newParamSet);
+    HKS_IF_NOT_SUCC_RETURN(ret, ret)
+
+    ret = CopyParamsExceptStripTags(paramSetIn, newParamSet);
+    if (ret != HKS_SUCCESS) {
+        HksFreeParamSet(&newParamSet);
+        return ret;
+    }
+
+    struct HksParam paramsToAdd[] = {
+        { .tag = HKS_TAG_ATTESTATION_OS_VERSION,
+          .blob = { (uint32_t)strlen(osVersion), (uint8_t *)osVersion } },
+        { .tag = HKS_TAG_ATTESTATION_API_VERSION,
+          .blob = { (uint32_t)strlen(apiVersion), (uint8_t *)apiVersion } },
+    };
+
+    ret = HksAddParams(newParamSet, paramsToAdd, HKS_ARRAY_SIZE(paramsToAdd));
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("add OS dist tags failed");
+        HksFreeParamSet(&newParamSet);
+        return ret;
+    }
+
+    ret = HksBuildParamSet(&newParamSet);
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("build paramset with OS dist tags failed");
+        HksFreeParamSet(&newParamSet);
+        return ret;
+    }
+
+    *paramSetOut = newParamSet;
+    return HKS_SUCCESS;
+}
+
 static int32_t HdiProxyAttestKey(const struct HuksBlob *key, const struct HuksParamSet *paramSet,
     struct HuksBlob *certChain)
 {
@@ -758,8 +851,14 @@ ENABLE_CFI(int32_t HuksAccessAttestKey(const struct HksBlob *key, const struct H
     struct HksParamSet *paramSetInNew = NULL;
     ret = HandleKeyClassTag(paramSet, &paramSetInNew);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "HandleKeyClassTag fail, ret = %" LOG_PUBLIC "d", ret)
-    HDI_CONVERTER_FUNC_ATTESTKEY(key, paramSetInNew, certChain, ret, HdiProxyAttestKey)
+
+    struct HksParamSet *paramSetWithKeyClass = NULL;
+    ret = InjectOsDistTags(paramSetInNew, &paramSetWithKeyClass);
     HksFreeParamSet(&paramSetInNew);
+    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "InjectOsDistTags fail, ret = %" LOG_PUBLIC "d", ret)
+
+    HDI_CONVERTER_FUNC_ATTESTKEY(key, paramSetWithKeyClass, certChain, ret, HdiProxyAttestKey)
+    HksFreeParamSet(&paramSetWithKeyClass);
     return ret;
 }
 #endif
