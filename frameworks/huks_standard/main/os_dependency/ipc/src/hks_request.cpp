@@ -41,27 +41,14 @@ static volatile std::atomic_bool g_isInitBundleDead = false;
 constexpr uint32_t DEFAULT_TIME = 2;
 sptr<Security::Hks::HksStub> g_hks_callback;
 
-// ukey async request timeout cap (s): uniform default 60s; a business may raise it up to the
-// 15-minute hard limit. Also used by HksExtSendAsyncMessage (compiled regardless of
-// HKS_UKEY_EXTENSION_CRYPTO) to validate the set/get timeout range.
+// ukey async timeout: cap 900s (15min), default 60s, wait margin 0s.
+// HKS_UKEY_ASYNC_MAX_TIMEOUT and HKS_UKEY_ASYNC_WAIT_MARGIN are also used by HksExtSendAsyncMessage
+// (set/get), so they stay outside HKS_UKEY_EXTENSION_CRYPTO.
 constexpr uint32_t HKS_UKEY_ASYNC_MAX_TIMEOUT = 900;
-#ifdef HKS_UKEY_EXTENSION_CRYPTO
-// Uniform default when no timeout tag is set (s) — aligned with the Extension-side JS callback
-// wait default.
 constexpr uint32_t HKS_UKEY_ASYNC_DEFAULT_TIMEOUT = 60;
-#endif
-// Wait margin (s): the client wait must exceed the server-side JS callback wait (both share the
-// same timeout value); otherwise, in freeze/BUSY scenarios where the server replies at
-// ~timeout+ε, the client would have already given up -> 12000012. The margin covers the
-// server-side timeout decision + task scheduling + the IPC reply round-trip (normal operations
-// return far earlier than the timeout, so they are unaffected).
 constexpr uint32_t HKS_UKEY_ASYNC_WAIT_MARGIN = 0;
 
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
-// Timeout parsing: tag unit is seconds; unset = uniform default 60s; valid range [1, 900]
-// The tag is selected per code layout: reused standard-code ukey operations
-// read HKS_TAG_TIMEOUT(529), extension codes read HKS_EXT_CRYPTO_TAG_TIMEOUT(200006)
-// (HksUkeyTimeoutTagByMsgCode is the single source of truth).
 int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInterfaceCode msgCode,
     uint32_t *timeout)
 {

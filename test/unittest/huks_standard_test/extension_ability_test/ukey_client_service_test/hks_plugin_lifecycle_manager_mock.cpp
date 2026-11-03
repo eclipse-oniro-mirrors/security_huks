@@ -17,6 +17,7 @@
 #include "hks_plugin_loader.h"
 #include "hks_log.h"
 #include "hks_external_error_info.h"
+#include "hks_response.h"
 #include "hks_type.h"
 
 namespace OHOS {
@@ -249,6 +250,13 @@ void ReportUKeySessionEvent(uint32_t eventId, const struct UKeyReportErrInfo *er
     (void)handle;
     (void)processInfo;
     (void)paramSet;
+}
+
+void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlob *response)
+{
+    (void)context;
+    (void)result;
+    (void)response;
 }
 
 } // extern "C" 
