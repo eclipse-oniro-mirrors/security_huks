@@ -45,10 +45,11 @@ sptr<Security::Hks::HksStub> g_hks_callback;
 // HKS_UKEY_ASYNC_MAX_TIMEOUT and HKS_UKEY_ASYNC_WAIT_MARGIN are also used by HksExtSendAsyncMessage
 // (set/get), so they stay outside HKS_UKEY_EXTENSION_CRYPTO.
 constexpr uint32_t HKS_UKEY_ASYNC_MAX_TIMEOUT = 900;
-constexpr uint32_t HKS_UKEY_ASYNC_DEFAULT_TIMEOUT = 60;
 constexpr uint32_t HKS_UKEY_ASYNC_WAIT_MARGIN = 0;
 
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
+constexpr uint32_t HKS_UKEY_ASYNC_DEFAULT_TIMEOUT = 60;
+
 int32_t HksUkeyParseTimeout(const struct HksParamSet *paramSet, enum HksIpcInterfaceCode msgCode,
     uint32_t *timeout)
 {
