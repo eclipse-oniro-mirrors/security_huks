@@ -133,6 +133,8 @@ if (defined(ohos_kernel_type) && ohos_kernel_type == "liteos_m") {
 
     deps = []
 
+    external_deps = []
+
     if (huks_use_mbedtls == true) {
       sources += [
         "../../../frameworks/huks_standard/main/crypto_engine/crypto_common/src/hks_core_ability.c",
@@ -250,11 +252,10 @@ if (defined(ohos_kernel_type) && ohos_kernel_type == "liteos_m") {
         "../../../frameworks/huks_standard/main/crypto_engine/hitls/src/hks_hitls_ed25519.c",
       ]
       defines += [ "HKS_MINI_OPENHITLS_ED25519" ]
-      include_dirs += [
-        "//third_party/openhitls/include/crypto",
-        "//third_party/openhitls/include/bsl",
+      external_deps += [
+        "openhitls:openhitls_bsl",
+        "openhitls:openhitls_crypto"
       ]
-      deps += [ "//third_party/openhitls:openhitls_crypto" ]
     } else if (huks_use_mbedtls) {
       sources += [
         "../../../frameworks/huks_standard/main/crypto_engine/mbedtls/src/hks_crypto_ed25519.c",
@@ -275,7 +276,10 @@ if (defined(ohos_kernel_type) && ohos_kernel_type == "liteos_m") {
           [ "-DHKS_CONFIG_LITE_HAP_STORE_PATH=\"${huks_lite_hap_store_path}\"" ]
     }
 
-    external_deps = [ "hilog_lite:hilog_lite" ]
+    if (huks_enable_log == true) {
+      defines += [ "_HUKS_LOG_ENABLE_" ]
+      external_deps += [ "hilog_lite:hilog_lite" ]
+    }
 
     if (huks_enable_upgrade_rkc_v1tov2) {
       # enable upgrade rkc derivation algorithm from PBKDF2 to HKDF

@@ -42,7 +42,7 @@
 #include "crypt_eal_rand.h"
 #include "crypt_errno.h"
 #include "crypt_types.h"
-#include "trng.h"
+#include "entropy_poll.h"
 
 #include "hks_common_check.h"
 #include "hks_crypto_hal.h"
@@ -129,12 +129,26 @@ static int32_t HksGetEntropy(void *ctx, CRYPT_Data *entropy, uint32_t strength, 
     }
     entropy->len = entropyLen;
 
-    errcode_t ret = uapi_drv_cipher_trng_get_random_bytes(entropy->data, entropy->len);
-    if (ret != ERRCODE_SUCC) {
-        HKS_LOG_E("get entropy failed, ret = %" LOG_PUBLIC "d", ret);
+    size_t oLen = 0;
+    uint32_t attempts = entropyLen;
+    uint32_t currentLen = 0;
+    while (attempts > 0 && currentLen < entropyLen) {
+        int ret = mbedtls_hardware_poll(NULL, entropy->data + currentLen, entropyLen - currentLen, &oLen);
+        if (ret != 0) {
+            HKS_LOG_E("get entropy failed, ret = %" LOG_PUBLIC "d", ret);
+            HksCleanEntropy(ctx, entropy);
+            return CRYPT_DRBG_FAIL_GET_ENTROPY;
+        }
+        currentLen += (uint32_t)oLen;
+        attempts--;
+    }
+
+    if (currentLen != entropyLen) {
+        HKS_LOG_E("currentLen = %" LOG_PUBLIC "u, entropyLen = %" LOG_PUBLIC "u", currentLen, entropyLen);
         HksCleanEntropy(ctx, entropy);
         return CRYPT_DRBG_FAIL_GET_ENTROPY;
     }
+
     return CRYPT_SUCCESS;
 }
 
