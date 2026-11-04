@@ -27,6 +27,7 @@
 #include "hks_mem.h"
 #include "hks_common_check.h"
 #include "hks_report_ukey_event.h"
+#include "hks_response.h"
 #include "securec.h"
 #include <cstdint>
 #include <string>
@@ -309,10 +310,6 @@ int32_t HksIpcServiceOnSetOrGetRemotePropertyAdapter(const struct HksProcessInfo
         propertyInfo->propertyId->size);
     CppParamSet cppParamSet(paramSet);
 
-    auto hksExtProxy = OHOS::iface_cast<OHOS::Security::Hks::IHksExtService>(
-        reinterpret_cast<OHOS::IRemoteObject *>(const_cast<uint8_t *>(remoteObject)));
-    HKS_IF_NULL_LOGE_RETURN(hksExtProxy, HKS_ERROR_NULL_POINTER, "hksExtProxy is null");
-
     struct HksProcessWithErrorInfo processAndError = { processInfo, nullptr };
 
     auto pluginManager = OHOS::Security::Huks::HuksPluginLifeCycleMgr::GetInstanceWrapper();
@@ -326,10 +323,27 @@ int32_t HksIpcServiceOnSetOrGetRemotePropertyAdapter(const struct HksProcessInfo
     ret = RemotePropertyPack(cppParamSet, outData, outSize, ret);
     HKS_IF_NOT_SUCC_LOGE(ret, "PackRemoteProperty fail");
 
-    hksExtProxy->SendAsyncReply(HKS_SUCCESS, outData, outSize,
-        HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY_REPLY, processAndError.errInfo);
-
-    HKS_IF_TRUE_EXCU(processAndError.errInfo != nullptr, HksFreeExternalErrorInfo(processAndError.errInfo));
+    if (remoteObject != nullptr) {
+        // Legacy path (timeout <= 3): reply directly via the client callback object. The errCode
+        // channel carries SUCCESS; the real result is packed inside [returnResult|paramSet].
+        auto hksExtProxy = OHOS::iface_cast<OHOS::Security::Hks::IHksExtService>(
+            reinterpret_cast<OHOS::IRemoteObject *>(const_cast<uint8_t *>(remoteObject)));
+        HKS_IF_NULL_LOGE_RETURN(hksExtProxy, HKS_ERROR_NULL_POINTER, "hksExtProxy is null");
+        hksExtProxy->SendAsyncReply(HKS_SUCCESS, outData, outSize,
+            HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY_REPLY, processAndError.errInfo);
+        HKS_IF_TRUE_EXCU(processAndError.errInfo != nullptr, HksFreeExternalErrorInfo(processAndError.errInfo));
+    } else {
+        // New async path (timeout > 3): deliver via the thread-local result slot (HksSendResponse
+        // null-context path captures {SUCCESS, packedBlob}) + thread-local ext err (OnDone picks
+        // it up). outData is [returnResult|paramSet] — identical to the legacy wire format, so the
+        // client's HksRemotePropertyUnpackFromService needs no change.
+        if (processAndError.errInfo != nullptr && processAndError.errInfo->hasErrorInfo) {
+            HksAppendThreadExtErrMsg(processAndError.errInfo->errVal, processAndError.errInfo->errorDesc);
+        }
+        HKS_IF_TRUE_EXCU(processAndError.errInfo != nullptr, HksFreeExternalErrorInfo(processAndError.errInfo));
+        struct HksBlob packedBlob = { outSize, outData.get() };
+        HksSendResponse(nullptr, HKS_SUCCESS, &packedBlob);
+    }
     return HKS_SUCCESS;
 }
 

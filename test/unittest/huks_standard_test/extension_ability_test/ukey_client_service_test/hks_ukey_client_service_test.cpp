@@ -507,7 +507,8 @@ HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest012, TestSize.Level0)
 
 /**
 * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest013
-* @tc.desc: HksIpcServiceOnSetOrGetRemotePropertyAdapter — null remoteObject returns NULL_POINTER
+* @tc.desc: HksIpcServiceOnSetOrGetRemotePropertyAdapter — null remoteObject takes the async
+*           result-slot branch and returns SUCCESS
 * @tc.type: FUNC
 */
 HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest013, TestSize.Level0) {
@@ -527,7 +528,7 @@ HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest013, TestSize.Level0)
         .resourceId = &resBlob, .propertyId = &propBlob };
     int32_t ret = HksIpcServiceOnSetOrGetRemotePropertyAdapter(&processInfo, &propertyInfo,
         paramSet, nullptr);
-    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER);
+    EXPECT_EQ(ret, HKS_SUCCESS);
 
     HksFreeParamSet(&paramSet);
     HKS_FREE_BLOB(processInfo.userId);

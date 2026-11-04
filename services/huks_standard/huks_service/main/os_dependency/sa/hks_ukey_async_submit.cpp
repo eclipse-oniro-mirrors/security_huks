@@ -131,6 +131,20 @@ static bool SkipImportCertLeadingFields(const uint8_t *p, uint32_t remain,
     return true;
 }
 
+// SET_OR_GET_REMOTE_PROPERTY layout [operation u32][resourceId blob][propertyId blob][paramSet] —
+// the operation u32 leads, so it cannot use the sequential skipBlobs+skipU32s pattern either.
+static bool SkipSetOrGetLeadingFields(const uint8_t *p, uint32_t remain,
+    uint32_t msgCode, uint32_t &offset)
+{
+    if (!SkipUint32InRaw(remain, offset) || !SkipBlobInRaw(p, remain, offset) ||
+        !SkipBlobInRaw(p, remain, offset)) {
+        HKS_LOG_E("ukey unpack set/get skip fail, msgCode=%" LOG_PUBLIC "u offset=%" LOG_PUBLIC "u",
+            msgCode, offset);
+        return false;
+    }
+    return true;
+}
+
 // Skip the leading fields (blobs/uint32s) that precede the paramSet in the wire layout,
 // based on the message code. Returns false on bounds failure; sets offset to the paramSet start.
 static bool SkipLeadingFieldsForParamSet(enum HksIpcInterfaceCode code, uint32_t msgCode,
@@ -138,6 +152,9 @@ static bool SkipLeadingFieldsForParamSet(enum HksIpcInterfaceCode code, uint32_t
 {
     if (code == HKS_MSG_EXT_IMPORT_CERTIFICATE) {
         return SkipImportCertLeadingFields(p, remain, msgCode, offset);
+    }
+    if (code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY) {
+        return SkipSetOrGetLeadingFields(p, remain, msgCode, offset);
     }
     // Sequential layout: N blobs then M u32s, all before the paramSet.
     uint32_t skipBlobs = (code == HKS_MSG_IMPORT_WRAPPED_KEY) ? 2 : 1;
@@ -399,6 +416,8 @@ static std::string ExtractProviderNameThreeStage(enum HksIpcInterfaceCode code, 
 
 // Non-three-stage: first blob is providerName (EXPORT/GET_RESOURCE) or resourceId JSON.
 // Layout: [uint32 len | blob(4-aligned)] [paramSet]
+// SET_OR_GET_REMOTE_PROPERTY layout: [operation u32][resourceId blob][propertyId blob][paramSet]
+//   — the leading operation u32 means the resourceId blob is not at offset 0.
 static std::string ExtractProviderNameNonThreeStage(enum HksIpcInterfaceCode code, const struct HksBlob &srcData)
 {
     const uint8_t *p = srcData.data;
@@ -406,12 +425,23 @@ static std::string ExtractProviderNameNonThreeStage(enum HksIpcInterfaceCode cod
     if (p == nullptr || remain < sizeof(uint32_t)) {
         return "";
     }
-    uint32_t blobLen = 0;
-    (void)memcpy_s(&blobLen, sizeof(blobLen), p, sizeof(uint32_t));
-    if (remain - sizeof(uint32_t) < blobLen) {
+    uint32_t offset = 0;
+    if (code == HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY) {
+        // skip the leading operation u32, then read the resourceId blob
+        if (!SkipUint32InRaw(remain, offset)) {
+            return "";
+        }
+    }
+    if (remain - offset < sizeof(uint32_t)) {
         return "";
     }
-    std::string firstBlob(reinterpret_cast<const char *>(p + sizeof(uint32_t)), blobLen);
+    uint32_t blobLen = 0;
+    (void)memcpy_s(&blobLen, sizeof(blobLen), p + offset, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    if (remain - offset < blobLen) {
+        return "";
+    }
+    std::string firstBlob(reinterpret_cast<const char *>(p + offset), blobLen);
     if (code == HKS_MSG_EXT_EXPORT_PROVIDER_CERTIFICATES || code == HKS_MSG_EXT_GET_RESOURCE_ID) {
         return firstBlob;
     }
@@ -628,11 +658,33 @@ static bool IsInitSyncPath(uint32_t code, const struct HksBlob &srcData)
     return !hasTimeout;
 }
 
+// set/get routing: timeout <= 3 (or absent, default 2s) -> legacy inline path (return true so the
+// caller falls back without consuming the callback object); timeout > 3 -> new thread-pool path.
+constexpr uint32_t HKS_SET_OR_GET_LEGACY_TIMEOUT_MAX = 3;
+static bool IsSetOrGetSyncPath(uint32_t code, const struct HksBlob &srcData)
+{
+    HKS_IF_TRUE_RETURN(code != HKS_MSG_EXT_SET_OR_GET_REMOTE_PROPERTY, false)
+
+    struct HksParamSet *paramSet = UnpackParamSetFromSrcData(code, srcData);
+    bool isSync = true; // no timeout tag -> default 2s -> legacy
+    if (paramSet != nullptr) {
+        struct HksParam *timeoutParam = nullptr;
+        if (HksGetParam(paramSet, HksUkeyTimeoutTagByMsgCode(code), &timeoutParam) == HKS_SUCCESS) {
+            isSync = (timeoutParam->uint32Param <= HKS_SET_OR_GET_LEGACY_TIMEOUT_MAX);
+        }
+    }
+    HksFreeParamSet(&paramSet);
+    return isSync;
+}
+
 bool HksTrySubmitUkeyAsyncMsg(uint32_t code, MessageParcel &data, uint32_t outSize,
     const struct HksBlob &srcData, const uint8_t *context)
 {
     HKS_IF_TRUE_LOGI_RETURN(IsInitSyncPath(code, srcData), false,
         "ukey init sync path (no timeout tag), code=%" LOG_PUBLIC "u", code);
+    HKS_IF_TRUE_LOGI_RETURN(IsSetOrGetSyncPath(code, srcData), false,
+        "set/get sync path (timeout <= %" LOG_PUBLIC "u), code=%" LOG_PUBLIC "u",
+        HKS_SET_OR_GET_LEGACY_TIMEOUT_MAX, code);
 
     sptr<IRemoteObject> clientStub = data.ReadRemoteObject();
     HKS_IF_NOT_TRUE_LOGI_RETURN(clientStub != nullptr, false,
