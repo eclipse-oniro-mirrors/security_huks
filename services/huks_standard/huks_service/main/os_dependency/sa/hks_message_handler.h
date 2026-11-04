@@ -19,6 +19,7 @@
 #include "huks_service_ipc_interface_code.h"
 
 #include "hks_ipc_service.h"
+#include "hks_ipc_service_cert_chain.h"
 #include "hks_type.h"
 
 typedef void (*HksIpcHandlerFuncProc)(const struct HksBlob *msg, const uint8_t *context);
@@ -52,6 +53,11 @@ const struct HksIpcEntryPoint HKS_IPC_MESSAGE_HANDLER[] = {
     { HKS_MSG_UNWRAP_KEY, HksIpcUnwrapKey },
     { HKS_MSG_ENCAPSULATE, HksIpcServiceEncapsulate },
     { HKS_MSG_DECAPSULATE, HksIpcServiceDecapsulate },
+    { HKS_MSG_EXT_GET_ANON_CERT_CHAIN, HksIpcServiceGetAnonCertChain },
+    { HKS_MSG_EXT_GET_CERT_CHAIN, HksIpcServiceGetCertChain },
+    { HKS_MSG_EXT_SET_STORAGE, HksIpcServiceSetStorage },
+    { HKS_MSG_EXT_GET_STORAGE, HksIpcServiceGetStorage },
+    { HKS_MSG_EXT_STORAGE_EXIST, HksIpcServiceStorageExist },
 
     { HKS_MSG_EXT_REGISTER, HksIpcServiceRegisterProvider },
     { HKS_MSG_EXT_UNREGISTER, HksIpcServiceUnregisterProvider },

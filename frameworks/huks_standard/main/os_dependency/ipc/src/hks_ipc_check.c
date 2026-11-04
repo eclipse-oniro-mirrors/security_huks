@@ -498,3 +498,33 @@ int32_t HksCheckIpcDecapsulateConcret(const struct HksBlob *keyAlias, const stru
 
     return HKS_SUCCESS;
 }
+
+int32_t HksCheckIpcSetStorage(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
+    const struct HksBlob *data)
+{
+    int32_t ret = HksCheckBlob2AndParamSet(keyAlias, data, paramSet);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check keyAlias or data or paramSet failed")
+
+    if ((keyAlias->size > MAX_PROCESS_SIZE) || (data->size > MAX_PROCESS_SIZE)) {
+        return HKS_ERROR_INVALID_ARGUMENT;
+    }
+    uint32_t totalSize = sizeof(keyAlias->size) + ALIGN_SIZE(keyAlias->size) +
+        ALIGN_SIZE(paramSet->paramSetSize) + sizeof(data->size) + ALIGN_SIZE(data->size);
+    HKS_IF_TRUE_LOGE_RETURN(totalSize > MAX_PROCESS_SIZE, HKS_ERROR_INVALID_ARGUMENT,
+        "HksCheckIpcSetStorage size check failed")
+    return HKS_SUCCESS;
+}
+
+int32_t HksCheckIpcGetStorage(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet)
+{
+    int32_t ret = HksCheckBlobAndParamSet(keyAlias, paramSet);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check keyAlias or paramSet failed")
+
+    if (keyAlias->size > MAX_PROCESS_SIZE) {
+        return HKS_ERROR_INVALID_ARGUMENT;
+    }
+    uint32_t totalSize = sizeof(keyAlias->size) + ALIGN_SIZE(keyAlias->size) + ALIGN_SIZE(paramSet->paramSetSize);
+    HKS_IF_TRUE_LOGE_RETURN(totalSize > MAX_PROCESS_SIZE, HKS_ERROR_INVALID_ARGUMENT,
+        "HksCheckIpcGetStorage size check failed")
+    return HKS_SUCCESS;
+}

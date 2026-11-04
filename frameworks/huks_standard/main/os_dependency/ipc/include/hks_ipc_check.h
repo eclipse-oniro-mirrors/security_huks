@@ -90,6 +90,11 @@ int32_t HksCheckIpcDecapsulateConcret(const struct HksBlob *keyAlias, const stru
     const struct HksBlob *sharedKeyAlias, const struct HksParamSet *sharedKeyParamSet,
     struct HksBlob *encapOrsharedSecret);
 
+int32_t HksCheckIpcSetStorage(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
+    const struct HksBlob *data);
+
+int32_t HksCheckIpcGetStorage(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet);
+
 #ifdef __cplusplus
 }
 #endif

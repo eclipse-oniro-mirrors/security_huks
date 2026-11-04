@@ -144,7 +144,7 @@ int32_t HksOpensslX25519AgreeKey(const struct HksBlob *nativeKey, const struct H
     const struct HksKeySpec *spec, struct HksBlob *sharedKey)
 {
     (void)spec;
-    HKS_IF_NOT_SUCC_LOGE_RETURN(CheckAsyKeyMaterialSize(HKS_ALG_X25519, pubKey, NULL), HKS_ERROR_INVALID_ARGUMENT,
+    HKS_IF_NOT_SUCC_LOGE_RETURN(CheckAsyKeyMaterialSize(HKS_ALG_X25519, pubKey, NULL), HKS_ERROR_CRYPTO_ENGINE_ERROR,
         "invalid peer pubKey material!")
     HKS_IF_NOT_SUCC_LOGE_RETURN(CheckAsyKeyMaterialSize(HKS_ALG_X25519, nativeKey, NULL), HKS_ERROR_INVALID_ARGUMENT,
         "invalid native key material!")

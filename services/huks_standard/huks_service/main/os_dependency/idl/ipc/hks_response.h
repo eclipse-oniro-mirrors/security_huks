@@ -24,6 +24,8 @@ extern "C" {
 
 void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlob *response);
 
+uint32_t HksGetIpcCallingUid(void);
+
 int32_t HksGetProcessInfoForIPC(const struct HksParamSet *paramSet,
     const uint8_t *context, struct HksProcessInfo *processInfo);
 
