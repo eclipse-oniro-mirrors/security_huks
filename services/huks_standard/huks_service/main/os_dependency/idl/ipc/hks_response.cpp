@@ -184,6 +184,11 @@ void HksSendResponse(const uint8_t *context, int32_t result, const struct HksBlo
     HksWriteResponseToParcel(reply, result, response);
 }
 
+uint32_t HksGetIpcCallingUid(void)
+{
+    return static_cast<uint32_t>(IPCSkeleton::GetCallingUid());
+}
+
 static int32_t GetUidAndUserId(const struct HksParamSet *paramSet, int &uid, int &userId)
 {
     auto callingAppUid = IPCSkeleton::GetCallingUid();

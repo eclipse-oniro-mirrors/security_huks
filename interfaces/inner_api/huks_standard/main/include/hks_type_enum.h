@@ -462,7 +462,9 @@ enum HksSecureSignType {
  */
 enum HksAttestationMode {
     HKS_ATTESTATION_MODE_DEFAULT = 0,
-    HKS_ATTESTATION_MODE_ANONYMOUS
+    HKS_ATTESTATION_MODE_ANONYMOUS,
+    /* anco annoynous attest */
+    HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT
 };
 
 /**

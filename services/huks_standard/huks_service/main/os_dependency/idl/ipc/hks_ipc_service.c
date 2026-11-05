@@ -14,8 +14,10 @@
  */
 
 #include "hks_ipc_service.h"
+#include "hks_anco_inject.h"
 #include "hks_error_code.h"
 #include "hks_param.h"
+#include "hks_plugin_def.h"
 #include "hks_type.h"
 
 #include "hks_ipc_serialization.h"
@@ -1363,6 +1365,12 @@ void HksIpcServiceGetKeyInfoList(const struct HksBlob *srcData, const uint8_t *c
 int32_t HksAttestAccessControl(struct HksParamSet *paramSet)
 {
 #ifdef HKS_SUPPORT_ACCESS_TOKEN
+    if (HksGetIpcCallingUid() == HKS_ANCO_BROKER_UID &&
+        HksIsAncoBrokerCall(paramSet)) {
+        HKS_LOG_I("HksAttestAccessControl: ANCO broker call, skip permission check");
+        return HKS_SUCCESS;
+    }
+
     // check permisson for attest ids
     for (uint32_t i = 0; i < sizeof(g_idList) / sizeof(g_idList[0]); i++) {
         for (uint32_t j = 0; j < paramSet->paramsCnt; j++) {

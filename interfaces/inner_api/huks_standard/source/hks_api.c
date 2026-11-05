@@ -841,6 +841,26 @@ HKS_API_EXPORT int32_t HksGetKeyInfoList(const struct HksParamSet *paramSet,
 }
 
 #ifdef HKS_SUPPORT_API_ATTEST_KEY
+// If caller already provided HKS_TAG_ATTESTATION_MODE in paramSet, keep it; otherwise inject the given mode.
+// (broker path pre-injects ANONYMOUS_COMPAT mode; non-broker path relies on default injection here.)
+static int32_t AddAttestModeIfAbsent(const struct HksParamSet *paramSet, enum HksAttestationMode mode,
+    struct HksParamSet *newParamSet)
+{
+    struct HksParam *existMode = NULL;
+    if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &existMode) == HKS_SUCCESS) {
+        return HKS_SUCCESS; // caller-provided mode present, skip duplicate injection
+    }
+    struct HksParam attestMode = {
+        .tag = HKS_TAG_ATTESTATION_MODE,
+        .uint32Param = mode,
+    };
+    int32_t ret = HksAddParams(newParamSet, &attestMode, 1);
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("add param attestMode fail");
+    }
+    return ret;
+}
+
 static int32_t ConstructNewAttestParamSet(const struct HksParamSet *paramSet, enum HksAttestationMode mode,
     struct HksParamSet **newParamSet)
 {
@@ -860,13 +880,8 @@ static int32_t ConstructNewAttestParamSet(const struct HksParamSet *paramSet, en
             HKS_LOG_E("copy params fail");
             break;
         }
-        struct HksParam attestMode = {
-            .tag = HKS_TAG_ATTESTATION_MODE,
-            .uint32Param = mode,
-        };
-        ret = HksAddParams(*newParamSet, &attestMode, 1);
+        ret = AddAttestModeIfAbsent(paramSet, mode, *newParamSet);
         if (ret != HKS_SUCCESS) {
-            HKS_LOG_E("add param attestMode fail");
             break;
         }
         ret = HksBuildParamSet(newParamSet);
@@ -1271,6 +1286,69 @@ HKS_API_EXPORT int32_t HksDecapsulate(const struct HksBlob *keyAlias, const stru
     HKS_FREE_BLOB(dummyAlias);
     HKS_IF_NOT_SUCC_LOGE(ret, "leave Decapsulate, result = %" LOG_PUBLIC "d", ret);
     return ret;
+}
+
+HKS_API_EXPORT int32_t HksGetAnonCertChain(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, struct HksBlob *certChain)
+{
+#ifdef HKS_SUPPORT_API_ATTEST_KEY
+    HKS_LOG_D("enter GetAnonCertChain");
+    if ((keyAlias == NULL) || (paramSet == NULL) || (certChain == NULL)) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    return HksClientGetAnonCertChain(keyAlias, paramSet, certChain);
+#else
+    (void)keyAlias;
+    (void)paramSet;
+    (void)certChain;
+    return HKS_ERROR_API_NOT_SUPPORTED;
+#endif
+}
+
+HKS_API_EXPORT int32_t HksGetCertChain(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, struct HksBlob *certChain)
+{
+#ifdef HKS_SUPPORT_API_ATTEST_KEY
+    HKS_LOG_D("enter GetCertChain");
+    if ((keyAlias == NULL) || (paramSet == NULL) || (certChain == NULL)) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    return HksClientGetCertChain(keyAlias, paramSet, certChain);
+#else
+    (void)keyAlias;
+    (void)paramSet;
+    (void)certChain;
+    return HKS_ERROR_API_NOT_SUPPORTED;
+#endif
+}
+
+HKS_API_EXPORT int32_t HksSetStorage(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, const struct HksBlob *data)
+{
+    HKS_LOG_D("enter SetStorage");
+    if ((keyAlias == NULL) || (paramSet == NULL) || (data == NULL)) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    return HksClientSetStorage(keyAlias, paramSet, data);
+}
+
+HKS_API_EXPORT int32_t HksGetStorage(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, struct HksBlob *data)
+{
+    HKS_LOG_D("enter GetStorage");
+    if ((keyAlias == NULL) || (paramSet == NULL) || (data == NULL)) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    return HksClientGetStorage(keyAlias, paramSet, data);
+}
+
+HKS_API_EXPORT int32_t HksStorageExist(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet)
+{
+    HKS_LOG_D("enter StorageExist");
+    if ((keyAlias == NULL) || (paramSet == NULL)) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    return HksClientStorageExist(keyAlias, paramSet);
 }
 
 HKS_API_EXPORT const char *HksGetErrorMsg(void)

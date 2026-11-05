@@ -23,6 +23,7 @@
 #endif
 
 #include "hks_client_service.h"
+#include <stdio.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -30,6 +31,8 @@
 #include <stdatomic.h>
 #include "hks_type.h"
 #include "hks_base_check.h"
+#include "hks_anco_inject.h"
+#include "hks_cert_chain_store.h"
 #include "hks_client_check.h"
 #ifdef HKS_SUPPORT_API_ATTEST_KEY
 #include "hks_client_service_dcm.h"
@@ -422,6 +425,11 @@ static void ServiceGenerateKeyCore(struct HksServiceGenKeyCtx *ctx)
         ctx->ret = AppendNewInfoForGenKeyInService(ctx->processInfo, ctx->paramSetIn, &ctx->newParamSet);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "append processName tag failed, ret = %" LOG_PUBLIC "d", ctx->ret)
 
+#ifdef HKS_SUPPORT_GET_BUNDLE_INFO
+        ctx->ret = HksInjectAncoAppInfoForGenKey(ctx->processInfo, &ctx->newParamSet);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "inject anco appInfo for genKey failed, ret = %" LOG_PUBLIC "d", ctx->ret)
+#endif
+
         ctx->ret = CheckKeySecuritySeFromParamSet(ctx->newParamSet, &ctx->isSeCalling);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "CheckKeySecuritySeFromParamSet fail, ret = %" LOG_PUBLIC "d", ctx->ret)
 
@@ -710,12 +718,12 @@ int32_t HksServiceDeleteKey(const struct HksProcessInfo *processInfo, const stru
             HKS_LOG_E("service delete main key failed, ret = %" LOG_PUBLIC "d", ret);
         }
 #ifdef HKS_ENABLE_SMALL_TO_SERVICE
-        int32_t oldRet = HKS_FAILURE;
         if (HksCheckNeedUpgradeForSmallToService(processInfo) == HKS_SUCCESS) {
-            oldRet = HksDeleteOldKeyForSmallToService(keyAlias);
+            int32_t oldRet = HksDeleteOldKeyForSmallToService(keyAlias);
             ret = (oldRet == HKS_SUCCESS) ? HKS_SUCCESS : ret;
         }
 #endif
+        HksCertChainStoreRemove(processInfo->uidInt, keyAlias);
     } while (0);
 #ifdef L2_STANDARD
     struct HksParamSet *reportParamSet = NULL;
@@ -1380,6 +1388,59 @@ static int32_t AddAppInfoAndModelToParamSet(const struct HksProcessInfo *process
     return ret;
 }
 
+static int32_t AccessAttestKey(struct HksBlob *keyFromFile, struct HksParamSet *newParamSet, struct HksBlob *certChain);
+
+struct HksAttestKeyCtx {
+    const struct HksProcessInfo *processInfo;
+    const struct HksBlob *keyAlias;
+    const struct HksParamSet *paramSet;
+    struct HksBlob *certChain;
+    const uint8_t *remoteObject;
+    struct HksBlob keyFromFile;
+    struct HksParamSet *newParamSet;
+    struct HksParamSet *processInfoParamSet;
+    bool isSeCalling;
+    uint32_t certChainCapacity;
+    int32_t ret;
+};
+
+static int32_t BuildAttestParamSetForBroker(const struct HksParamSet *inParamSet, struct HksParamSet **outParamSet)
+{
+    int32_t ret = AppendToNewParamSet(inParamSet, outParamSet);
+    HKS_IF_NOT_SUCC_LOGE(ret, "anco copy paramSet failed, ret = %" LOG_PUBLIC "d.", ret)
+    if (ret == HKS_SUCCESS) {
+        ret = HksBuildParamSet(outParamSet);
+        HKS_IF_NOT_SUCC_LOGE(ret, "anco build paramSet failed, ret = %" LOG_PUBLIC "d.", ret)
+    }
+    return ret;
+}
+
+#ifdef SUPPORT_STORAGE_BACKUP
+// Retry attest from backup key file after main-key corruption/missing.
+static void RetryAttestWithBakKey(struct HksAttestKeyCtx *ctx)
+{
+    do {
+        HKS_FREE_BLOB(ctx->keyFromFile);
+#ifdef HKS_SUPPORT_GET_BUNDLE_INFO
+        HksFreeParamSet(&ctx->newParamSet);
+#endif
+        if (HksIsAncoBrokerCall(ctx->paramSet)) {
+            ctx->ret = BuildAttestParamSetForBroker(ctx->processInfoParamSet, &ctx->newParamSet);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "anco build attest paramSet failed, ret = %" LOG_PUBLIC "d.", ctx->ret)
+        } else {
+            ctx->ret = AddAppInfoAndModelToParamSet(ctx->processInfo, ctx->processInfoParamSet, &ctx->newParamSet);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "AddAppInfoAndModelToParam failed, ret = %" LOG_PUBLIC "d.", ctx->ret)
+        }
+        ctx->ret = GetKeyData(ctx->processInfo, ctx->keyAlias, ctx->newParamSet, &ctx->keyFromFile,
+            HKS_STORAGE_TYPE_BAK_KEY);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "get bak key and new param failed, ret = %" LOG_PUBLIC "d", ctx->ret)
+        ctx->ret = CheckKeySecuritySeFromKeyFile(&ctx->keyFromFile, &ctx->isSeCalling);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "CheckKeySecuritySeFromKeyFile fail, ret = %" LOG_PUBLIC "d", ctx->ret)
+        ctx->ret = AccessAttestKey(&ctx->keyFromFile, ctx->newParamSet, ctx->certChain);
+    } while (0);
+}
+#endif
+
 struct HksCertChainInfo {
     struct HksBlob *certChain;
     uint32_t certChainCapacity;
@@ -1396,7 +1457,21 @@ static int32_t DcmGenerateCertChainInAttestKey(
     (void)isSeKey;
     int32_t ret = HKS_SUCCESS;
 #ifndef HKS_UNTRUSTED_RUNNING_ENV
-    HKS_IF_NOT_TRUE_LOGI_RETURN(HksAttestIsAnonymous(paramSet), HKS_SUCCESS, "non anonymous attest key.")
+    /* HksAttestIsAnonymous only checks HKS_ATTESTATION_MODE_ANONYMOUS; the Anco
+     * anonymous-compat path uses HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT, which must
+     * also fall through to the DCM offline cert generation below instead of being
+     * short-circuited as a non-anonymous attest. */
+
+    // 东湖匿名传入HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT
+    bool isAnonAttest = HksAttestIsAnonymous(paramSet);
+    if (!isAnonAttest) {
+        struct HksParam *modeParam = NULL;
+        if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &modeParam) == HKS_SUCCESS &&
+            modeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT) {
+            isAnonAttest = true;
+        }
+    }
+    HKS_IF_NOT_TRUE_LOGI_RETURN(isAnonAttest, HKS_SUCCESS, "non anonymous attest key.")
 #ifdef HUKS_ENABLE_UPGRADE_KEY_STORAGE_SECURE_LEVEL
     HksUpgradeOrRequestUnlockRead();
 #endif
@@ -1405,7 +1480,12 @@ static int32_t DcmGenerateCertChainInAttestKey(
     if (ret == HKS_SUCCESS && anonyModeParam->uint32Param == HKS_ANONYMOUS_ATTEST_OFFLINE) {
         ret = DcmLocalGenerateCertChain(processInfo, certChainInfo->certChain, remoteObject);
     } else {
-        if (isSeKey) {
+        // Anco anonymous attest goes through offline cert generation
+        struct HksParam *attestModeParam = NULL;
+        if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &attestModeParam) == HKS_SUCCESS &&
+            attestModeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT) {
+            ret = DcmLocalGenerateCertChain(processInfo, certChainInfo->certChain, remoteObject);
+        } else if (isSeKey) {
             ret = DcmSeGenerateCertChain(certChainInfo->certChain, remoteObject);
         } else {
             ret = DcmGenerateCertChain(certChainInfo->certChain, remoteObject);
@@ -1440,20 +1520,6 @@ static int32_t AccessAttestKey(struct HksBlob *keyFromFile, struct HksParamSet *
     return ret;
 }
 
-struct HksAttestKeyCtx {
-    const struct HksProcessInfo *processInfo;
-    const struct HksBlob *keyAlias;
-    const struct HksParamSet *paramSet;
-    struct HksBlob *certChain;
-    const uint8_t *remoteObject;
-    struct HksBlob keyFromFile;
-    struct HksParamSet *newParamSet;
-    struct HksParamSet *processInfoParamSet;
-    bool isSeCalling;
-    uint32_t certChainCapacity;
-    int32_t ret;
-};
-
 static void AttestKeyCoreOp(struct HksAttestKeyCtx *ctx)
 {
     ctx->ret = HksCheckAttestKeyParams(&ctx->processInfo->processName, ctx->keyAlias, ctx->paramSet, ctx->certChain);
@@ -1476,25 +1542,21 @@ static void AttestKeyCoreOp(struct HksAttestKeyCtx *ctx)
         }
         ctx->certChainCapacity = ctx->certChain->size;
         if (ctx->ret == HKS_SUCCESS) {
-            ctx->ret = AddAppInfoAndModelToParamSet(ctx->processInfo, ctx->processInfoParamSet, &ctx->newParamSet);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "AddAppInfoAndModelToParam failed, ret = %" LOG_PUBLIC "d.", ctx->ret)
+            if (HksIsAncoBrokerCall(ctx->paramSet)) {
+                ctx->ret = BuildAttestParamSetForBroker(ctx->processInfoParamSet, &ctx->newParamSet);
+                HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "anco build attest paramSet failed, ret = %" LOG_PUBLIC "d.",
+                    ctx->ret)
+            } else {
+                ctx->ret = AddAppInfoAndModelToParamSet(ctx->processInfo, ctx->processInfoParamSet, &ctx->newParamSet);
+                HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "AddAppInfoAndModelToParam failed, ret = %" LOG_PUBLIC "d.",
+                    ctx->ret)
+            }
             ctx->ret = AccessAttestKey(&ctx->keyFromFile, ctx->newParamSet, ctx->certChain);
         }
 #ifdef SUPPORT_STORAGE_BACKUP
         if (ctx->ret == HKS_ERROR_CORRUPT_FILE || ctx->ret == HKS_ERROR_FILE_SIZE_FAIL ||
             ctx->ret == HKS_ERROR_NOT_EXIST) {
-            HKS_FREE_BLOB(ctx->keyFromFile);
-#ifdef HKS_SUPPORT_GET_BUNDLE_INFO
-            HksFreeParamSet(&ctx->newParamSet);
-#endif
-            ctx->ret = AddAppInfoAndModelToParamSet(ctx->processInfo, ctx->processInfoParamSet, &ctx->newParamSet);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "AddAppInfoAndModelToParam failed, ret = %" LOG_PUBLIC "d.", ctx->ret)
-            ctx->ret = GetKeyData(ctx->processInfo, ctx->keyAlias, ctx->newParamSet, &ctx->keyFromFile,
-                HKS_STORAGE_TYPE_BAK_KEY);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "get bak key and new param failed, ret = %" LOG_PUBLIC "d", ctx->ret)
-            ctx->ret = CheckKeySecuritySeFromKeyFile(&ctx->keyFromFile, &ctx->isSeCalling);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "CheckKeySecuritySeFromKeyFile fail, ret = %" LOG_PUBLIC "d", ctx->ret)
-            ctx->ret = AccessAttestKey(&ctx->keyFromFile, ctx->newParamSet, ctx->certChain);
+            RetryAttestWithBakKey(ctx);
         }
 #endif
         HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "HuksAttestKey fail, ret = %" LOG_PUBLIC "d.", ctx->ret)
@@ -1522,6 +1584,12 @@ int32_t HksServiceAttestKey(const struct HksProcessInfo *processInfo, const stru
     HksOneStageReportInfo info = {ctx.ret, startTime, traceId.traceId.chainId, __func__, HKS_ONE_STAGE_ATTEST};
     (void)HksOneStageEventReport(keyAlias, &ctx.keyFromFile, ctx.newParamSet, processInfo, &info);
 #endif
+
+    // persist cert chain and challenge after attest success (broker path only; non-broker keeps original behavior)
+    if (ctx.ret == HKS_SUCCESS && certChain != NULL && certChain->data != NULL && certChain->size > 0 &&
+        HksIsAncoBrokerCall(paramSet)) {
+        HksCertChainStoreOnAttestSuccess(processInfo->uidInt, keyAlias, paramSet, certChain);
+    }
 
     AttestFree(&ctx.keyFromFile, &ctx.newParamSet, &ctx.processInfoParamSet, &traceId);
     DecrementSeCountByService(ctx.isSeCalling);
@@ -1552,6 +1620,9 @@ void HksServiceDeleteProcessInfo(const struct HksProcessInfo *processInfo, bool 
         if (anco) {
 #ifdef L2_STANDARD
             HksServiceDeleteAncoUIDKeyFile(processInfo);
+            if (processInfo->processName.size == sizeof(uint32_t) && processInfo->processName.data != NULL) {
+                HksCertChainStoreRemoveByUid(*(uint32_t *)processInfo->processName.data);
+            }
 #else
             HKS_LOG_E("only L2 device supported anco");
 #endif

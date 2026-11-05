@@ -52,6 +52,9 @@
 #define APP_MODE_DEBUG "debug"
 #define APP_MODE_RELEASE "release"
 const int32_t HKS_MAIN_APPLICATION = 0;
+const uint32_t HKS_HEX_CHARS_PER_BYTE = 2;
+const uint32_t HKS_HEX_NIBBLE_BITS = 4;
+const uint32_t HKS_HEX_NIBBLE_MASK = 0x0F;
 
 using namespace OHOS;
 using namespace Security::AccessToken;
@@ -415,5 +418,60 @@ int32_t HksGetBundleNameFromUid(uint32_t uid, std::string &bundleName)
         " uid=%" LOG_PUBLIC "u, ret=%" LOG_PUBLIC "d", uid, ret)
 
     return HKS_SUCCESS;
+}
+
+// Convert signature blob to lowercase hex string (empty blob returns empty string)
+static std::string SignatureToHex(const struct HksBlob *signature)
+{
+    std::string sigHex;
+    if (signature == NULL || signature->data == NULL || signature->size == 0) {
+        return sigHex;
+    }
+    sigHex.reserve(signature->size * HKS_HEX_CHARS_PER_BYTE);
+    static const char hexChars[] = "0123456789abcdef";
+    for (uint32_t i = 0; i < signature->size; i++) {
+        sigHex.push_back(hexChars[(signature->data[i] >> HKS_HEX_NIBBLE_BITS) & HKS_HEX_NIBBLE_MASK]);
+        sigHex.push_back(hexChars[signature->data[i] & HKS_HEX_NIBBLE_MASK]);
+    }
+    return sigHex;
+}
+
+// Copy string into a newly allocated HksBlob (returns HKS_ERROR_MALLOC_FAIL/INSUFFICIENT_MEMORY on failure)
+static int32_t CopyStringToBlob(const std::string &s, struct HksBlob *out)
+{
+    out->size = s.size();
+    out->data = static_cast<uint8_t *>(HksMalloc(out->size));
+    HKS_IF_NULL_LOGE_RETURN(out->data, HKS_ERROR_MALLOC_FAIL, "malloc AncoAppId fail")
+
+    if (memcpy_s(out->data, out->size, s.c_str(), s.size()) != EOK) {
+        HKS_LOG_E("HksGetAncoAttestApplicationId: copy appId failed");
+        HKS_FREE_BLOB(*out);
+        return HKS_ERROR_INSUFFICIENT_MEMORY;
+    }
+    return HKS_SUCCESS;
+}
+
+// build ATTESTATION_APPLICATION_ID
+// format: "bundleName|versionCode|signature" (pipe-separated)
+int32_t HksGetAncoAttestApplicationId(uint32_t uid, int32_t userId,
+    uint64_t versionCode, const struct HksBlob *signature, struct HksBlob *outAppId)
+{
+    (void)userId;
+    HKS_IF_NULL_LOGE_RETURN(outAppId, HKS_ERROR_NULL_POINTER, "outAppId is nullptr.")
+
+    // 1. Look up bundleName (reverse-lookup from uid via BMS)
+    std::string bundleName;
+    int32_t ret = HksGetBundleNameFromUid(uid, bundleName);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "HksGetAncoAttestApplicationId get bundleName failed uid=%u", uid)
+
+    // 2. Convert signature to lowercase hex
+    std::string sigHex = SignatureToHex(signature);
+    HKS_LOG_I("AncoAppId bundle=%{public}s ver=%{public}llu sigLen=%{public}u sigHexLen=%{public}zu",
+        bundleName.c_str(), (unsigned long long)versionCode,
+        (signature != NULL) ? signature->size : 0, sigHex.size());
+
+    // 3. Concatenate "bundleName|versionCode|signature" and write to outAppId
+    std::string appIdStr = bundleName + "|" + std::to_string(versionCode) + "|" + sigHex;
+    return CopyStringToBlob(appIdStr, outAppId);
 }
 #endif

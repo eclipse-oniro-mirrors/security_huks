@@ -136,6 +136,20 @@ int32_t HksClientEncapsulate(const struct HksBlob *keyAlias, const struct HksPar
 int32_t HksClientDecapsulate(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
     const struct HksBlob *sharedKeyAlias, const struct HksParamSet *sharedKeyParamSet,
     struct HksBlob *encapOrsharedSecret);
+
+int32_t HksClientGetAnonCertChain(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, struct HksBlob *certChain);
+
+int32_t HksClientGetCertChain(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, struct HksBlob *certChain);
+
+int32_t HksClientSetStorage(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, const struct HksBlob *data);
+
+int32_t HksClientGetStorage(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, struct HksBlob *data);
+
+int32_t HksClientStorageExist(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet);
 #ifdef __cplusplus
 }
 #endif
