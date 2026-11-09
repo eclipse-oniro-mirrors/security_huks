@@ -43,18 +43,17 @@ bool HksIsCallerSystemApp(const HksProcessInfo *processInfo)
 
     auto accessTokenID = static_cast<OHOS::Security::AccessToken::AccessTokenID>(processInfo->accessTokenId);
     auto tokenType = OHOS::Security::AccessToken::AccessTokenKit::GetTokenTypeFlag(accessTokenID);
+    HKS_IF_TRUE_LOGE_RETURN(tokenType == OHOS::Security::AccessToken::ATokenTypeEnum::TOKEN_INVALID, false,
+        "HksIsCallerSystemApp: get token type failed, accessTokenId=%" LOG_PUBLIC PRIu64, processInfo->accessTokenId);
 
-    if (tokenType == OHOS::Security::AccessToken::ATokenTypeEnum::TOKEN_NATIVE) {
-        HKS_LOG_I("HksIsCallerSystemApp: caller is system SA, accessTokenId=%" LOG_PUBLIC PRIu64,
-            processInfo->accessTokenId);
-        return true;
-    }
+    HKS_IF_TRUE_LOGI_RETURN(tokenType == OHOS::Security::AccessToken::ATokenTypeEnum::TOKEN_NATIVE, true,
+        "HksIsCallerSystemApp: caller is system SA, accessTokenId=%" LOG_PUBLIC PRIu64, processInfo->accessTokenId);
 
     if (tokenType == OHOS::Security::AccessToken::ATokenTypeEnum::TOKEN_HAP) {
-        constexpr unsigned int SYSTEM_APP_FLAG = 0x0001;
+        constexpr unsigned int systemAppFlag = 0x0001;
         OHOS::Security::AccessToken::HapTokenInfo hapInfo;
         int ret = OHOS::Security::AccessToken::AccessTokenKit::GetHapTokenInfo(accessTokenID, hapInfo);
-        HKS_IF_TRUE_LOGE_RETURN(ret != OHOS::ERR_OK || (hapInfo.tokenAttr & SYSTEM_APP_FLAG) == 0, false,
+        HKS_IF_TRUE_LOGE_RETURN(ret != OHOS::ERR_OK || (hapInfo.tokenAttr & systemAppFlag) == 0, false,
             "HksIsCallerSystemApp: not system hap, ret=%" LOG_PUBLIC "d accessTokenId=%" LOG_PUBLIC PRIu64,
             ret, processInfo->accessTokenId)
         return true;
