@@ -1298,6 +1298,41 @@ int32_t HksClientAttestKey(const struct HksBlob *keyAlias, const struct HksParam
     return ret;
 }
 
+int32_t HksClientAsyncAnonAttestKey(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
+    HksAsyncAnonAttestCallback callback, void *userData)
+{
+    struct HksBlob inBlob = { 0, NULL };
+    struct HksBlob outBlob = { 0, NULL };
+
+    int32_t ret = 0;
+    do {
+        /* the async caller does not pre-allocate a cert chain: the request keeps exactly the
+         * same wire layout as the sync anon attest one, so a synthetic chain with the standard
+         * four-cert capacities is used purely for buffer sizing (only the sizes are read) */
+        uint8_t dummy = 0;
+        struct HksBlob certs[HKS_CERT_COUNT] = {
+            { HKS_CERT_ROOT_SIZE, &dummy },
+            { HKS_CERT_CA_SIZE, &dummy },
+            { HKS_CERT_DEVICE_SIZE, &dummy },
+            { HKS_CERT_APP_SIZE, &dummy },
+        };
+        struct HksCertChain certChain = { certs, HKS_CERT_COUNT };
+
+        ret = CertificateChainInitBlob(&inBlob, &outBlob, keyAlias, paramSet, &certChain);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "CertificateChainInitBlob fail")
+
+        ret = HksCertificateChainPack(&inBlob, keyAlias, paramSet, &outBlob);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksCertificateChainPack fail")
+
+        ret = HksSendAnonAttestRequestWithCallback(&inBlob, &outBlob, paramSet, callback, userData);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "HksSendAnonAttestRequestWithCallback fail")
+    } while (0);
+
+    HKS_FREE_BLOB(inBlob);
+    HKS_FREE_BLOB(outBlob);
+    return ret;
+}
+
 static int32_t CopyData(const uint8_t *data, const uint32_t size, struct HksBlob *out)
 {
     if (size == 0) {

@@ -112,6 +112,8 @@ extern "C" {
 const uint8_t *HksCreateAnonAttestStub(void);
 int32_t HksWaitAnonAttestReply(const uint8_t *stubObj, uint32_t timeoutSec, struct HksBlob *outCert);
 void HksDestroyAnonAttestStub(const uint8_t *stubObj);
+int32_t HksSendAnonAttestResultToCaller(const uint8_t *stubObj, int32_t result,
+    const struct HksBlob *certChain);
 
 #ifdef __cplusplus
 }

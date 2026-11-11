@@ -1021,6 +1021,34 @@ HKS_API_EXPORT int32_t HksAnonAttestKeyOffline(const struct HksBlob *keyAlias,
 #endif
 }
 
+HKS_API_EXPORT int32_t HksAsyncAnonAttestKey(const struct HksBlob *keyAlias,
+    const struct HksParamSet *paramSet, HksAsyncAnonAttestCallback callback, void *userData)
+{
+#ifdef HKS_SUPPORT_API_ATTEST_KEY
+    HKS_LOG_D("enter AsyncAnonAttestKey");
+    if ((keyAlias == NULL) || (paramSet == NULL) || (callback == NULL)) {
+        return HKS_ERROR_NULL_POINTER;
+    }
+    struct HksParamSet *newParamSet = NULL;
+    int32_t ret = ConstructNewAttestParamSet(paramSet, HKS_ATTESTATION_MODE_ANONYMOUS, &newParamSet);
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("construct new paramSet for async anon attest key fail");
+        return ret;
+    }
+
+    ret = HksClientAsyncAnonAttestKey(keyAlias, newParamSet, callback, userData);
+    HksFreeParamSet(&newParamSet);
+    HKS_IF_NOT_SUCC_LOGE(ret, "leave AsyncAnonAttestKey, result = %" LOG_PUBLIC "d", ret);
+    return ret;
+#else
+    (void)keyAlias;
+    (void)paramSet;
+    (void)callback;
+    (void)userData;
+    return HKS_ERROR_API_NOT_SUPPORTED;
+#endif
+}
+
 HKS_API_EXPORT int32_t HksGetCertificateChain(const struct HksBlob *keyAlias, const struct HksParamSet *paramSet,
     struct HksCertChain *certChain)
 {

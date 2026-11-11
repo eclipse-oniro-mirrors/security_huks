@@ -36,6 +36,7 @@
 #include "hks_client_check.h"
 #ifdef HKS_SUPPORT_API_ATTEST_KEY
 #include "hks_client_service_dcm.h"
+#include "hks_anon_attest_stub.h"
 #include "parameter.h"
 #endif
 #include "hks_client_service_common.h"
@@ -1388,7 +1389,8 @@ static int32_t AddAppInfoAndModelToParamSet(const struct HksProcessInfo *process
     return ret;
 }
 
-static int32_t AccessAttestKey(struct HksBlob *keyFromFile, struct HksParamSet *newParamSet, struct HksBlob *certChain);
+static int32_t AccessAttestKey(struct HksBlob *keyFromFile, struct HksParamSet *newParamSet,
+    struct HksBlob *certChain);
 
 struct HksAttestKeyCtx {
     const struct HksProcessInfo *processInfo;
@@ -1426,7 +1428,8 @@ static void RetryAttestWithBakKey(struct HksAttestKeyCtx *ctx)
 #endif
         if (HksIsAncoBrokerCall(ctx->paramSet)) {
             ctx->ret = BuildAttestParamSetForBroker(ctx->processInfoParamSet, &ctx->newParamSet);
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "anco build attest paramSet failed, ret = %" LOG_PUBLIC "d.", ctx->ret)
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "anco build attest paramSet failed, ret = %" LOG_PUBLIC "d.",
+                ctx->ret)
         } else {
             ctx->ret = AddAppInfoAndModelToParamSet(ctx->processInfo, ctx->processInfoParamSet, &ctx->newParamSet);
             HKS_IF_NOT_SUCC_LOGE_BREAK(ctx->ret, "AddAppInfoAndModelToParam failed, ret = %" LOG_PUBLIC "d.", ctx->ret)
@@ -1446,32 +1449,39 @@ struct HksCertChainInfo {
     uint32_t certChainCapacity;
 };
 
-static int32_t DcmGenerateCertChainInAttestKey(
-    const struct HksProcessInfo *processInfo, const struct HksParamSet *paramSet,
-    const uint8_t *remoteObject, struct HksCertChainInfo *certChainInfo, bool isSeKey)
+/* HksAttestIsAnonymous only checks HKS_ATTESTATION_MODE_ANONYMOUS; the Anco
+ * anonymous-compat path uses HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT, which must
+ * also be treated as an anonymous attest by both the TEE DCM route and the
+ * software async-reply delivery below. */
+// 东湖匿名传入HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT
+static bool IsAnonAttestMode(const struct HksParamSet *paramSet)
 {
-    (void)processInfo;
-    (void)paramSet;
-    (void)remoteObject;
-    (void)certChainInfo;
-    (void)isSeKey;
+    if (HksAttestIsAnonymous(paramSet)) {
+        return true;
+    }
+    struct HksParam *modeParam = NULL;
+    return (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &modeParam) == HKS_SUCCESS &&
+        modeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT);
+}
+
+/* The admission reply never carries the real chain for anonymous attest: the result is
+ * delivered through the caller's stub object (async reply), so only a zero placeholder
+ * of the full capacity is returned with the admission. */
+static void WipeAttestCertChain(struct HksCertChainInfo *certChainInfo)
+{
+    (void)memset_s(certChainInfo->certChain->data, certChainInfo->certChainCapacity, 0,
+        certChainInfo->certChainCapacity);
+    certChainInfo->certChain->size = certChainInfo->certChainCapacity;
+}
+
+static int32_t DcmGenerateCertChainInAttestKey(
+    __attribute__((unused)) const struct HksProcessInfo *processInfo, const struct HksParamSet *paramSet,
+    const uint8_t *remoteObject, struct HksCertChainInfo *certChainInfo,
+    __attribute__((unused)) bool isSeKey)
+{
     int32_t ret = HKS_SUCCESS;
 #ifndef HKS_UNTRUSTED_RUNNING_ENV
-    /* HksAttestIsAnonymous only checks HKS_ATTESTATION_MODE_ANONYMOUS; the Anco
-     * anonymous-compat path uses HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT, which must
-     * also fall through to the DCM offline cert generation below instead of being
-     * short-circuited as a non-anonymous attest. */
-
-    // 东湖匿名传入HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT
-    bool isAnonAttest = HksAttestIsAnonymous(paramSet);
-    if (!isAnonAttest) {
-        struct HksParam *modeParam = NULL;
-        if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_MODE, &modeParam) == HKS_SUCCESS &&
-            modeParam->uint32Param == HKS_ATTESTATION_MODE_ANONYMOUS_COMPAT) {
-            isAnonAttest = true;
-        }
-    }
-    HKS_IF_NOT_TRUE_LOGI_RETURN(isAnonAttest, HKS_SUCCESS, "non anonymous attest key.")
+    HKS_IF_NOT_TRUE_LOGI_RETURN(IsAnonAttestMode(paramSet), HKS_SUCCESS, "non anonymous attest key.")
 #ifdef HUKS_ENABLE_UPGRADE_KEY_STORAGE_SECURE_LEVEL
     HksUpgradeOrRequestUnlockRead();
 #endif
@@ -1496,9 +1506,22 @@ static int32_t DcmGenerateCertChainInAttestKey(
 #endif
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "DcmGenerateCertChain fail, ret = %" LOG_PUBLIC "d.", ret)
 
-    (void)memset_s(certChainInfo->certChain->data, certChainInfo->certChainCapacity, 0,
-        certChainInfo->certChainCapacity);
-    certChainInfo->certChain->size = certChainInfo->certChainCapacity;
+    WipeAttestCertChain(certChainInfo);
+#else
+    /* The software engine attests inline (no DCM networking), so the chain is already
+     * complete here: deliver it to the caller's stub through the same async reply channel
+     * the TEE/DCM path uses, then wipe it from the admission reply. The wire behavior is
+     * identical on both environments - the admission never carries the chain, it always
+     * arrives through the callback object - so the client no longer distinguishes the
+     * service-side security level. */
+    if (IsAnonAttestMode(paramSet) && remoteObject != NULL) {
+        ret = HksSendAnonAttestResultToCaller(remoteObject, HKS_SUCCESS, certChainInfo->certChain);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret,
+            "send anon attest result to caller fail, ret = %" LOG_PUBLIC "d.", ret)
+
+        WipeAttestCertChain(certChainInfo);
+        HKS_LOG_I("software anon attest: cert chain delivered via stub, admission reply wiped");
+    }
 #endif
     return ret;
 }

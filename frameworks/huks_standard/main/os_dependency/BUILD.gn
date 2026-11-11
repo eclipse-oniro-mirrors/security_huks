@@ -27,9 +27,7 @@ config("huks_config") {
   }
 
   if (huks_enable_hisilicon_cipher_in_small) {
-    include_dirs += [
-      "//drivers/peripheral/huks/interfaces/include",
-    ]
+    include_dirs += [ "//drivers/peripheral/huks/interfaces/include" ]
     defines += [ "HKS_CIPHER_ROOT_KEY" ]
   }
 }
@@ -98,9 +96,13 @@ if (os_level == "standard") {
     sources = [
       "./ipc/src/hks_client_ipc_serialization.c",
       "./ipc/src/hks_ipc_check.c",
+      "./ipc/src/hks_ipc_serialization.c",
       "./ipc/src/hks_ipc_slice.c",
       "./ipc/src/hks_request.cpp",
-      "./ipc/src/hks_ipc_serialization.c",
+
+      # client-side async anonymous attestation stub (dispatches the DCM reply to the user
+      # callback without waiting); client lib only - the service never links it
+      "./ipc/src/hks_async_stub.cpp",
 
       # both client side and server side will include hks_sa_interface.cpp
       "../../../../services/huks_standard/huks_service/main/os_dependency/sa/hks_sa_interface.cpp",

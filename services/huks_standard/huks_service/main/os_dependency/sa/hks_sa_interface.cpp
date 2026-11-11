@@ -439,4 +439,42 @@ int32_t HksWaitAnonAttestReply(const uint8_t *stubObj, uint32_t timeoutSec, stru
     HKS_LOG_I("HksWaitAnonAttestReply: got cert size=%" LOG_PUBLIC "u", certSize);
     return HKS_SUCCESS;
 }
+
+// C interface for the software-level attestation path to publish its inline result
+// through the caller's stub object, the same delivery the TEE/DCM callback performs.
+int32_t HksSendAnonAttestResultToCaller(const uint8_t *stubObj, int32_t result,
+    const struct HksBlob *certChain)
+{
+    if (stubObj == nullptr) {
+        return HKS_ERROR_INVALID_ARGUMENT;
+    }
+    // For a remote caller this yields the HksProxy (one-way HKS_MSG_ATTEST_KEY_ASYNC_REPLY);
+    // for a stub living in this process (e.g. the Anco broker flow) the local interface is
+    // returned and the reply is dispatched in place. Either way the delivery is uniform.
+    auto proxy = OHOS::iface_cast<OHOS::Security::Hks::IHksService>(
+        OHOS::sptr<OHOS::IRemoteObject>(
+            reinterpret_cast<OHOS::IRemoteObject *>(const_cast<uint8_t *>(stubObj))));
+    HKS_IF_NULL_LOGE_RETURN(proxy, HKS_ERROR_BAD_STATE, "iface_cast IHksService failed")
+
+    std::unique_ptr<uint8_t[]> certData{};
+    uint32_t sz = 0;
+    if (result == HKS_SUCCESS) {
+        if (certChain == nullptr || certChain->data == nullptr || certChain->size == 0 ||
+            certChain->size > MAX_OUT_BLOB_SIZE) {
+            HKS_LOG_E("invalid cert chain on success, size=%" LOG_PUBLIC "u",
+                (certChain == nullptr) ? 0 : certChain->size);
+            return HKS_ERROR_INVALID_ARGUMENT;
+        }
+        certData = std::make_unique<uint8_t[]>(certChain->size);
+        HKS_IF_NULL_LOGE_RETURN(certData, HKS_ERROR_MALLOC_FAIL, "malloc cert chain failed")
+        HKS_IF_NOT_EOK_LOGE_RETURN(
+            memcpy_s(certData.get(), certChain->size, certChain->data, certChain->size),
+            HKS_ERROR_INSUFFICIENT_MEMORY, "copy cert chain failed")
+        sz = certChain->size;
+    }
+    proxy->SendAsyncReply(static_cast<uint32_t>(result), certData, sz);
+    HKS_LOG_I("anon attest result sent to caller, result=%" LOG_PUBLIC "d size=%" LOG_PUBLIC "u",
+        result, sz);
+    return HKS_SUCCESS;
+}
  
