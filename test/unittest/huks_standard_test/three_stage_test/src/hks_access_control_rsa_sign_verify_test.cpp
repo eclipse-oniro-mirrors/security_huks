@@ -647,7 +647,7 @@ HWTEST_F(HksAccessControlRsaSignVerifyTest, HksAcRsaSignVerifyTest010, TestSize.
 
 /**
  * @tc.name: HksAccessControlRsaSignVerifyTest.HksAcRsaSignVerifyTest011
- * @tc.desc: supports fine-grained access control, face test, verify need to access control.
+ * @tc.desc: supports fine-grained access control, face test, sign skips access control, verify need to access control.
  * @tc.type: FUNC
  * @tc.result:HKS_SUCCESS
  * @tc.require: issueI6UFG5
@@ -657,15 +657,15 @@ HWTEST_F(HksAccessControlRsaSignVerifyTest, HksAcRsaSignVerifyTest011, TestSize.
     HKS_LOG_I("Enter HksAcRsaSignVerifyTest011");
     const IDMParams RSAIDMParams003 = {
         .secureUid = 1,
-        .enrolledId = 1,
+        .enrolledId = 2,
         .time = 0,
-        .authType = 2
+        .authType = 4
     };
     struct TestAccessCaseRSAParams testAccessCaseParams(HKS_ACCESS_TEST_RSA_SIGN_003_PARAMS);
     testAccessCaseParams.genParams.push_back(
         { .tag = HKS_TAG_KEY_AUTH_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_VERIFY }
     );
-    EXPECT_EQ(HksAcRsaSignVerifyTestAbnormalCase(testAccessCaseParams, RSAIDMParams003),
+    EXPECT_EQ(HksAcRsaSignVerifyTestFineGrainedCase(testAccessCaseParams, RSAIDMParams003),
         HKS_SUCCESS);
 }
 
