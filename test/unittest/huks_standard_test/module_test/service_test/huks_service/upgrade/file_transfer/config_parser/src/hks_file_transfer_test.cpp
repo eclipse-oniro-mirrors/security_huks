@@ -14,6 +14,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <cstdlib>
 
 #include "hks_file_transfer.h"
 #include "hks_log.h"
@@ -45,6 +46,7 @@ void HksFileTransferTest::SetUp()
 
 void HksFileTransferTest::TearDown()
 {
+    std::system("find /data/service/el1/public/huks_service -user root -delete");
 }
 
 /**
