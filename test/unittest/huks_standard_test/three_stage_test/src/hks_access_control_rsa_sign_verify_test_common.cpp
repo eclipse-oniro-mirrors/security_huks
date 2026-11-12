@@ -133,7 +133,7 @@ static int32_t HksAcRsaThreeStageNormalCase(struct HksBlob *keyAlias, struct Hks
     };
 
     if (param.isUseIndataAfterHash) {
-        inData.size = strlen(reinterpret_cast<const char *>(g_inDataArrayAfterHash[param.hashAlgIndex]));
+        inData.size = DATA_ARRAY_AFTER_HASH_LEN[param.hashAlgIndex];
         inData.data = const_cast<uint8_t *>(g_inDataArrayAfterHash[param.hashAlgIndex]);
     }
 
@@ -186,7 +186,7 @@ static int32_t HksAcRsaThreeStageAbnormalCase(struct HksBlob *keyAlias, struct H
     };
 
     if (param.isUseIndataAfterHash) {
-        inData.size = strlen(reinterpret_cast<const char *>(g_inDataArrayAfterHash[param.hashAlgIndex]));
+        inData.size = DATA_ARRAY_AFTER_HASH_LEN[param.hashAlgIndex];
         inData.data = const_cast<uint8_t *>(g_inDataArrayAfterHash[param.hashAlgIndex]);
     }
 
@@ -287,7 +287,7 @@ static int32_t HksAcRsaThreeStageSignCustomCase(struct HksBlob *keyAlias1, struc
     struct HksParam signParams;
 
     if (param.isUseIndataAfterHash) {
-        inData.size = strlen(reinterpret_cast<const char *>(g_inDataArrayAfterHash[param.hashAlgIndex]));
+        inData.size = DATA_ARRAY_AFTER_HASH_LEN[param.hashAlgIndex];
         inData.data = const_cast<uint8_t *>(g_inDataArrayAfterHash[param.hashAlgIndex]);
     }
 
@@ -345,7 +345,7 @@ static int32_t HksAcRsaThreeStageVerifyCustomCase(struct HksBlob *keyAlias1, str
     };
 
     if (param.isUseIndataAfterHash) {
-        inData.size = strlen(reinterpret_cast<const char *>(g_inDataArrayAfterHash[param.hashAlgIndex]));
+        inData.size = DATA_ARRAY_AFTER_HASH_LEN[param.hashAlgIndex];
         inData.data = const_cast<uint8_t *>(g_inDataArrayAfterHash[param.hashAlgIndex]);
     }
 
@@ -566,6 +566,94 @@ int32_t HksAcRsaSignVerifyTestAbnormalCase(const TestAccessCaseRSAParams &testCa
         }
     } else {
         return AcRsaSignVerifyTestAbnormalCase(testCaseParams, param);
+    }
+
+    return HKS_SUCCESS;
+}
+
+static int32_t AcRsaSignVerifyTestFineGrainedCase(const TestAccessCaseRSAParams &testCaseParams,
+    const struct AcRsaSignVerifyParamStruct &param)
+{
+    /* 1. Generate Key */
+    // Generate Key
+    struct HksParamSet *genParamSet = nullptr;
+    int32_t ret = InitParamSet(&genParamSet, testCaseParams.genParams.data(), testCaseParams.genParams.size());
+    EXPECT_EQ(ret, HKS_SUCCESS) << "InitgenParamSet failed.";
+    uint8_t alias[] = "AcRSASignVerify";
+    struct HksBlob keyAlias = { sizeof(alias), alias };
+    ret = HksGenerateKeyForDe(&keyAlias, genParamSet, nullptr);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "RSA generate key failed.";
+
+    uint8_t tmpIn[] = "tempIn";
+    struct HksBlob finishInData = { 0, tmpIn };
+    uint8_t outDataS[RSA_COMMON_SIZE] = {0};
+    struct HksBlob outDataSign = { RSA_COMMON_SIZE, outDataS };
+    struct HksParamSet *signParamSet = nullptr;
+    ret = InitParamSet(&signParamSet, testCaseParams.signParams.data(), testCaseParams.signParams.size());
+    EXPECT_EQ(ret, HKS_SUCCESS) << "InitsignParamSet failed.";
+    ret = HksAcRsaThreeStageNormalCase(&keyAlias, signParamSet, param, &finishInData, &outDataSign);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "Three stage failed.";
+
+    /* 3. Export Public Key */
+    uint8_t pubKey[HKS_RSA_KEY_SIZE_1024] = {0};
+    struct HksBlob publicKey = { HKS_RSA_KEY_SIZE_1024, pubKey };
+    ret = HksExportPublicKeyForDe(&keyAlias, genParamSet, &publicKey);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "ExportPublicKey failed.";
+
+    /* 4. Import Key */
+    struct HksParamSet *verifyParamSet = nullptr;
+    ret = InitParamSet(&verifyParamSet, testCaseParams.verifyParams.data(), testCaseParams.verifyParams.size());
+    EXPECT_EQ(ret, HKS_SUCCESS) << "InitverifyParamSet failed.";
+
+    char newKey[] = "RSA_Sign_Verify_Import_KeyAlias";
+    struct HksBlob newKeyAlias = { .size = strlen(newKey), .data = reinterpret_cast<uint8_t *>(newKey) };
+    ret = HksImportKeyForDe(&newKeyAlias, verifyParamSet, &publicKey);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "ImportKey failed";
+
+    uint8_t temp[] = "out";
+    struct HksBlob verifyOut = { sizeof(temp), temp };
+    ret = HksAcRsaThreeStageAbnormalCase(&newKeyAlias, verifyParamSet, param, &outDataSign, &verifyOut);
+    EXPECT_NE(ret, HKS_SUCCESS) << "Three stage failed.";
+
+    /* 6. Delete New Key */
+    int32_t deleteRet = HksDeleteKeyForDe(&newKeyAlias, verifyParamSet);
+    EXPECT_EQ(deleteRet, HKS_SUCCESS) << "Delete ImportKey failed.";
+
+    ret = HksDeleteKeyForDe(&keyAlias, genParamSet);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "DeleteKey failed.";
+
+    HksFreeParamSet(&genParamSet);
+    HksFreeParamSet(&signParamSet);
+    HksFreeParamSet(&verifyParamSet);
+
+    return ret;
+}
+
+int32_t HksAcRsaSignVerifyTestFineGrainedCase(const TestAccessCaseRSAParams &testCaseParams,
+    const IDMParams &testIDMParams)
+{
+    struct HksParamSet *signParamSet = nullptr;
+    int32_t ret = InitParamSet(&signParamSet, testCaseParams.signParams.data(), testCaseParams.signParams.size());
+    EXPECT_EQ(ret, HKS_SUCCESS) << "InitsignParamSet failed.";
+
+    struct AcRsaSignVerifyParamStruct param = { testIDMParams, false, 0 };
+    struct HksParam *digestAlg = nullptr;
+    ret = HksGetParam(signParamSet, HKS_TAG_DIGEST, &digestAlg);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "GetParam failed.";
+    if (digestAlg->uint32Param == HKS_DIGEST_NONE) {
+        param.isUseIndataAfterHash = true;
+    }
+
+    if (param.isUseIndataAfterHash) {
+        for (uint32_t i = 0; i < (sizeof(g_inDataArrayAfterHash) / sizeof(uint8_t *)); i++) {
+            param.hashAlgIndex = i;
+            ret = AcRsaSignVerifyTestFineGrainedCase(testCaseParams, param);
+            if (ret != HKS_SUCCESS) {
+                return ret;
+            }
+        }
+    } else {
+        return AcRsaSignVerifyTestFineGrainedCase(testCaseParams, param);
     }
 
     return HKS_SUCCESS;

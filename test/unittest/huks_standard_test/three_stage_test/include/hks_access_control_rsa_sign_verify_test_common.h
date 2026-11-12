@@ -38,6 +38,8 @@ struct TestAccessCaseRSAParams {
 int32_t HksAcRsaSignVerifyTestNormalCase(const TestAccessCaseRSAParams &testCaseParams, const IDMParams &testIDMParams);
 int32_t HksAcRsaSignVerifyTestAbnormalCase(const TestAccessCaseRSAParams &testCaseParams,
     const IDMParams &testIDMParams);
+int32_t HksAcRsaSignVerifyTestFineGrainedCase(const TestAccessCaseRSAParams &testCaseParams,
+    const IDMParams &testIDMParams);
 int32_t HksAcRsaSignTestCustomCase(const TestAccessCaseRSAParams &testCaseParams1,
     const TestAccessCaseRSAParams &testCaseParams2, const IDMParams &testIDMParams);
 }
