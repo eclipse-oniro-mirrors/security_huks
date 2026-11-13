@@ -363,6 +363,41 @@ struct OH_Huks_Result OH_Huks_AsyncAnonAttestKeyItem(const struct OH_Huks_Blob *
     void *userData);
 
 /**
+ * @brief Obtain the anonymous key certificate offline. The offline key certificate depends on the network. You need to
+ * periodically connect to the network and use this interface to update the offline certificate. The offline anonymous
+ * key proof requires that the local time is accurate. Otherwise, the peer authentication certificate may expire and
+ * cannot work properly.
+ * @param keyAlias Pointer to the key alias.
+ * @param paramSet Obtains the pointer to the certificate chain parameter.
+ * @param certChain Pointer to the obtained certificate chain.
+ * @return Possible error codes (**errorCode**):<ul>
+ *     <li>OH_HUKS_SUCCESS 0: The operation is successful. </li>
+ *     <li>OH_HUKS_ERR_CODE_NOT_SUPPORTED_API 801: The function is not supported. Possible causes are as follows:
+ *     1. The hardware does not support this capability.
+ *     2. The chip does not support this capability.
+ *     3. Dependent service features are not supported. </li>
+ *     <li>OH_HUKS_ERR_CODE_FE:00-20:00_NOT_SUPPORTED 12000001: The algorithm mode is not supported. </li>
+ *     <li>OH_HUKS_ERR_CODE_FILE_OPERATION_FAIL 12000004: The file operation fails. </li>
+ *     <li>OH_HUKS_ERR_CODE_COMMUNICATION_FAIL 12000005: The IPC communication fails. </li>
+ *     <li>OH_HUKS_ERR_CODE_CRYPTO_FAIL 12000006: The encryption engine is faulty. </li>
+ *     <li>OH_HUKS_ERR_CODE_ITEM_NOT_EXIST 12000011: The key file does not exist. </li>
+ *     <li>OH_HUKS_ERR_CODE_INTERNAL_ERROR 12000012: The device environment or input parameter is abnormal. </li>
+ *     <li>OH_HUKS_ERR_CODE_INSUFFICIENT_MEMORY 12000014: The memory is insufficient. </li>
+ *     <li>OH_HUKS_ERR_CODE_INVALID_ARGUMENT 12000018: The parameter is incorrect. Possible causes are as follows:
+ *     1. The mandatory parameter is empty.
+ *     2. The parameter type is incorrect.
+ *     3. Parameter verification failed.
+ *     4. The group ID specified by the access group tag is invalid. </li>
+ *     <li>OH_HUKS_ERR_CODE_BUSY 12000024: The operation times out, which may be caused by network jitter. </li>
+ *     <li>OH_HUKS_ERR_CODE_NETWORK_UNAVAILABLE 12000027: The network is unavailable. Check the network connection.
+ *     </li>
+ *     </ul>
+ * @since 26.1.0
+ */
+struct OH_Huks_Result OH_Huks_AnonAttestKeyItemOffline(const struct OH_Huks_Blob *keyAlias,
+    const struct OH_Huks_ParamSet *paramSet, struct OH_Huks_CertChain *certChain);
+
+/**
  * @brief Initializes the key session interface and obtains a handle (mandatory) and challenge value (optional).
  *
  * @param keyAlias Indicates the pointer to the alias of the target key.

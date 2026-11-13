@@ -258,6 +258,13 @@ struct OH_Huks_Result OH_Huks_AsyncAnonAttestKeyItem(const struct OH_Huks_Blob *
     return ConvertApiResult(ret);
 }
 
+struct OH_Huks_Result OH_Huks_AnonAttestKeyItemOffline(const struct OH_Huks_Blob *keyAlias,
+    const struct OH_Huks_ParamSet *paramSet, struct OH_Huks_CertChain *certChain)
+{
+    int32_t result = HuksAttestAdapter(keyAlias, paramSet, certChain, HksAnonAttestKeyOffline);
+    return ConvertApiResult(result);
+}
+
 struct OH_Huks_Result OH_Huks_InitSession(const struct OH_Huks_Blob *keyAlias,
     const struct OH_Huks_ParamSet *paramSet, struct OH_Huks_Blob *handle, struct OH_Huks_Blob *token)
 {
