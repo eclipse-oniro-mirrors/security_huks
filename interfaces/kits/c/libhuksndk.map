@@ -24,6 +24,7 @@
     OH_Huks_AttestKeyItem;
     OH_Huks_AnonAttestKeyItem;
     OH_Huks_AsyncAnonAttestKeyItem;
+    OH_Huks_AnonAttestKeyItemOffline;
     OH_Huks_InitSession;
     OH_Huks_UpdateSession;
     OH_Huks_FinishSession;
