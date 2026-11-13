@@ -1,0 +1,14 @@
+{
+    "subca": {
+        "cn": "helloworld11",
+        "ou": "helloworld",
+        "o": "helloworld",
+        "c": "CN"
+    }
+    "anonsubca": {
+        "cn": "OpenHarmony ECC Device Anonymous Attestation CA 1",
+        "o": "OpenHarmony",
+        "c": "CN"
+    }
+
+}
