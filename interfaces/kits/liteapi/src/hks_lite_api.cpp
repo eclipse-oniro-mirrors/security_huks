@@ -116,6 +116,8 @@ static JSIValue CreateHuksKeySize(void)
     AddInt32PropertyInLite(keySize, "HUKS_RSA_KEY_SIZE_1024", HKS_RSA_KEY_SIZE_1024);
     AddInt32PropertyInLite(keySize, "HUKS_RSA_KEY_SIZE_2048", HKS_RSA_KEY_SIZE_2048);
 
+    AddInt32PropertyInLite(keySize, "HUKS_ECC_KEY_SIZE_256", HKS_ECC_KEY_SIZE_256);
+
     return keySize;
 }
 
@@ -131,6 +133,8 @@ static JSIValue CreateHuksKeyAlg(void)
     AddInt32PropertyInLite(keyAlg, "HUKS_ALG_CMAC", HKS_ALG_CMAC);
 
     AddInt32PropertyInLite(keyAlg, "HUKS_ALG_RSA", HKS_ALG_RSA);
+
+    AddInt32PropertyInLite(keyAlg, "HUKS_ALG_ECC", HKS_ALG_ECC);
 
     return keyAlg;
 }

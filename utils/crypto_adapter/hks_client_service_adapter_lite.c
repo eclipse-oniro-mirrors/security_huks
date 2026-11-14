@@ -348,7 +348,7 @@ static int32_t X509PublicKeyToRsa(mbedtls_rsa_context *rsaCtx, struct HksBlob *r
 #ifdef HKS_SUPPORT_ECC_C
 static int32_t CheckEccXySize(const uint32_t xSize, const uint32_t ySize)
 {
-    uint32_t maxKeyByteLen = HKS_ECC_KEY_SIZE_521 / HKS_BITS_PER_BYTE;
+    uint32_t maxKeyByteLen = HKS_KEY_BYTES(HKS_ECC_KEY_SIZE_521);
     if ((xSize > maxKeyByteLen) || (ySize > maxKeyByteLen)) {
         HKS_LOG_E("Invalid ecc public key size! xSize = 0x%" LOG_PUBLIC "X, ySize = 0x%" LOG_PUBLIC "X", xSize, ySize);
         return HKS_ERROR_INVALID_ARGUMENT;
@@ -380,7 +380,7 @@ static int32_t X509PublicKeyToEcc(mbedtls_ecp_keypair *pubKey, struct HksBlob *e
 
     struct HksPubKeyInfo *pubKeyInfo = (struct HksPubKeyInfo *)keyBuffer;
     pubKeyInfo->keyAlg = HKS_ALG_ECC;
-    pubKeyInfo->keySize = mbedtls_mpi_size(&(pubKey->MBEDTLS_PRIVATE(grp).P)) * HKS_BITS_PER_BYTE;
+    pubKeyInfo->keySize = (uint32_t)mbedtls_mpi_bitlen(&pubKey->MBEDTLS_PRIVATE(grp).P);
     pubKeyInfo->nOrXSize = xSize;
     pubKeyInfo->eOrYSize = ySize;
     pubKeyInfo->placeHolder = 0;

@@ -73,7 +73,7 @@ int32_t HksMbedtlsEcdsaSign(const struct HksBlob *key, const struct HksUsageSpec
         ret = HksEccKeyMaterialToPri(key, &(ctx.MBEDTLS_PRIVATE(d)));
         HKS_IF_NOT_SUCC_BREAK(ret)
 
-        mbedtls_md_type_t mbedtlsAlg;
+        uint32_t mbedtlsAlg;
         uint32_t digest = (usageSpec->digest == HKS_DIGEST_NONE) ? HKS_DIGEST_SHA256 : usageSpec->digest;
         ret = HksToMbedtlsDigestAlg(digest, &mbedtlsAlg);
         HKS_IF_NOT_SUCC_BREAK(ret)
