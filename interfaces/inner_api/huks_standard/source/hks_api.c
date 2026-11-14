@@ -895,6 +895,23 @@ static int32_t ConstructNewAttestParamSet(const struct HksParamSet *paramSet, en
     return ret;
 }
 
+static int32_t AddBase64IfAbsent(const struct HksParamSet *paramSet, struct HksParamSet *newParamSet)
+{
+    struct HksParam *existBase64 = NULL;
+    if (HksGetParam(paramSet, HKS_TAG_ATTESTATION_BASE64, &existBase64) == HKS_SUCCESS) {
+        return HKS_SUCCESS;
+    }
+    struct HksParam base64Param = {
+        .tag = HKS_TAG_ATTESTATION_BASE64,
+        .boolParam = true,
+    };
+    int32_t ret = HksAddParams(newParamSet, &base64Param, 1);
+    if (ret != HKS_SUCCESS) {
+        HKS_LOG_E("add param base64 fail");
+    }
+    return ret;
+}
+
 static int32_t ConstructOfflineAnonAttestParamSet(const struct HksParamSet *paramSet,
     struct HksParamSet **newParamSet)
 {
@@ -907,6 +924,8 @@ static int32_t ConstructOfflineAnonAttestParamSet(const struct HksParamSet *para
     do {
         ret = HksAddParams(*newParamSet, paramSet->params, paramSet->paramsCnt);
         HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "copy params fail");
+        ret = AddBase64IfAbsent(paramSet, *newParamSet);
+        HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add base64 param fail");
         
         struct HksParam *param = NULL;
         ret = HksGetParam(paramSet, HKS_TAG_ANONYMOUS_ATTESTATION_MODE, &param);
@@ -917,15 +936,13 @@ static int32_t ConstructOfflineAnonAttestParamSet(const struct HksParamSet *para
                 break;
             }
             
-            struct HksParam baseParams[] = {
-                {.tag = HKS_TAG_ATTESTATION_MODE, .uint32Param = HKS_ATTESTATION_MODE_ANONYMOUS},
-                {.tag = HKS_TAG_ATTESTATION_BASE64, .boolParam = true}};
-            ret = HksAddParams(*newParamSet, baseParams, sizeof(baseParams)/sizeof(struct HksParam));
-            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add base params fail");
+            struct HksParam attestModeParam = {
+                .tag = HKS_TAG_ATTESTATION_MODE, .uint32Param = HKS_ATTESTATION_MODE_ANONYMOUS};
+            ret = HksAddParams(*newParamSet, &attestModeParam, 1);
+            HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add attest mode param fail");
         } else {
             struct HksParam offlineParams[] = {
                 {.tag = HKS_TAG_ATTESTATION_MODE, .uint32Param = HKS_ATTESTATION_MODE_ANONYMOUS},
-                {.tag = HKS_TAG_ATTESTATION_BASE64, .boolParam = true},
                 {.tag = HKS_TAG_ANONYMOUS_ATTESTATION_MODE, .uint32Param = HKS_ANONYMOUS_ATTEST_OFFLINE}};
             ret = HksAddParams(*newParamSet, offlineParams, sizeof(offlineParams) / sizeof(struct HksParam));
             HKS_IF_NOT_SUCC_LOGE_BREAK(ret, "add offline params fail");
