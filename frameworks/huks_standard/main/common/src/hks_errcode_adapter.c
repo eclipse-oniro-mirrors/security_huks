@@ -190,7 +190,14 @@ static struct HksError g_errCodeTable[] = {
             .errorMsg = "This API is not supported.",
             .data = NULL
         }
-    }, {
+    },{
+        .innerErrCode = HKS_ERROR_EMULATOR_NOT_SUPPORT,
+        .hksResult = {
+            .errorCode = HUKS_ERR_CODE_EMULATOR_NOT_SUPPORT,
+            .errorMsg = "The feature is not supported on the emulator.",
+            .data = NULL
+        }
+    },  {
         .innerErrCode = HKS_ERROR_NOT_SUPPORTED,
         .hksResult = {
             .errorCode = HUKS_ERR_CODE_FEATURE_NOT_SUPPORTED,
