@@ -253,4 +253,58 @@ HWTEST_F(HksEventObserverTest, HksEventObserverTest012, TestSize.Level0)
     OHOS::EventFwk::CommonEventSubscribeInfo subscribeInfo(matchingSkills);
     SystemEventSubscriber subscriber(subscribeInfo);
 }
+
+HWTEST_F(HksEventObserverTest, HksEventObserverTest013, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksEventObserverTest013 - PACKAGE_REMOVED with keepData param");
+    Want want;
+    want.SetAction(OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_PACKAGE_REMOVED);
+    want.SetParam("uid", 1000);
+    want.SetParam("keepData", true);
+
+    CommonEventData data;
+    data.SetWant(want);
+
+    CommonEventSubscribeInfo subscribeInfo;
+    SystemEventSubscriber eventSubscriber(subscribeInfo);
+    eventSubscriber.OnReceiveEvent(data);
+    int32_t ret = HksInitialize();
+    ASSERT_TRUE(ret == HKS_SUCCESS);
+}
+
+HWTEST_F(HksEventObserverTest, HksEventObserverTest014, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksEventObserverTest014 - PACKAGE_UNINSTALLED_DATA_CLEARED with uid param");
+    Want want;
+    want.SetAction("usual.event.PACKAGE_UNINSTALLED_DATA_CLEARED");
+    want.SetParam("uid", 1000);
+
+    CommonEventData data;
+    data.SetWant(want);
+
+    CommonEventSubscribeInfo subscribeInfo;
+    SystemEventSubscriber eventSubscriber(subscribeInfo);
+    eventSubscriber.OnReceiveEvent(data);
+    int32_t ret = HksInitialize();
+    ASSERT_TRUE(ret == HKS_SUCCESS);
+}
+
+HWTEST_F(HksEventObserverTest, HksEventObserverTest015, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksEventObserverTest015 - PACKAGE_UNINSTALLED_DATA_CLEARED with group params");
+    Want want;
+    want.SetAction("usual.event.PACKAGE_UNINSTALLED_DATA_CLEARED");
+    want.SetParam("uid", 1000);
+    want.SetParam("developerId", std::string("testDeveloperId"));
+    want.SetParam("assetAccessGroups", std::string("testGroup1,testGroup2"));
+
+    CommonEventData data;
+    data.SetWant(want);
+
+    CommonEventSubscribeInfo subscribeInfo;
+    SystemEventSubscriber eventSubscriber(subscribeInfo);
+    eventSubscriber.OnReceiveEvent(data);
+    int32_t ret = HksInitialize();
+    ASSERT_TRUE(ret == HKS_SUCCESS);
+}
 }
