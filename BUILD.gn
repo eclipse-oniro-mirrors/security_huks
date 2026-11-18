@@ -115,7 +115,10 @@ group("service_group") {
       deps += [ "//base/security/huks/services/huks_standard/huks_service/main:hks_compatibility_bin" ]
     }
     if (huks_security_level == "software") {
-      deps += [ "//base/security/huks/services/huks_standard/huks_engine/main/core:huks_engine_core_standard" ]
+      deps += [
+        "//base/security/huks/services/huks_standard/huks_engine/main/core:huks_engine_core_standard",
+        "//base/security/huks/services/huks_standard/huks_engine/main/device_cert_manager/config:huks_device_certificate_manager_trusted_roots",
+      ]
     }
   } else if (os_level == "small") {
     deps = [ "//base/security/huks/frameworks/huks_lite:huks_server" ]

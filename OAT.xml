@@ -54,6 +54,8 @@
 
         <filefilterlist>
             <filefilter name="defaultFilter" desc="Files not to check">
+                <filteritem type="filepath" name="services/huks_standard/huks_engine/main/device_cert_manager/config/rootcerts" desc="root certificates files"/>
+                <filteritem type="filepath" name="services/huks_standard/huks_engine/main/device_cert_manager/config/subcasubjectinfos" desc="subca certificates subject info files"/>
             </filefilter>
             <filefilter name="defaultPolicyFilter" desc="Filters for compatibility，license header policies">
             </filefilter>
