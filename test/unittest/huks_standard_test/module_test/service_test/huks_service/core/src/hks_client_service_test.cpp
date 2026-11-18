@@ -1360,4 +1360,334 @@ HWTEST_F(HksClientServiceTest, HksClientServiceTest030, TestSize.Level0)
 
     HksFreeParamSet(&paramSet);
 }
+
+static struct HksParamSet *BuildInjectedProcessNameParamSet(const char *processNameStr)
+{
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    if (ret != HKS_SUCCESS) {
+        return nullptr;
+    }
+    struct HksParam processNameParam = {
+        .tag = HKS_TAG_PROCESS_NAME,
+        .blob = { strlen(processNameStr), (uint8_t *)processNameStr }
+    };
+    ret = HksAddParams(paramSet, &processNameParam, 1);
+    if (ret != HKS_SUCCESS) {
+        HksFreeParamSet(&paramSet);
+        return nullptr;
+    }
+    ret = HksBuildParamSet(&paramSet);
+    if (ret != HKS_SUCCESS) {
+        HksFreeParamSet(&paramSet);
+        return nullptr;
+    }
+    return paramSet;
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest031
+ * @tc.desc: tdd GetKeyParamSet with too small output buffer, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest031, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest031");
+    struct HksParamSet *keyParamSet = nullptr;
+    int32_t ret = HksInitParamSet(&keyParamSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam algParam = { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_AES };
+    ret = HksAddParams(keyParamSet, &algParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&keyParamSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob key = { keyParamSet->paramSetSize, (uint8_t *)keyParamSet };
+    struct HksParamSet *outParamSet = (struct HksParamSet *)HksMalloc(sizeof(struct HksParamSet));
+    ASSERT_NE(outParamSet, nullptr);
+    outParamSet->paramSetSize = sizeof(struct HksParamSet);
+
+    ret = GetKeyParamSet(&key, outParamSet);
+    EXPECT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+
+    HKS_FREE(outParamSet);
+    HksFreeParamSet(&keyParamSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest032
+ * @tc.desc: tdd GetKeyParamSet with invalid key size, expect HKS_ERROR_INVALID_KEY_INFO
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest032, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest032");
+    struct HksBlob key = { 0, nullptr };
+    struct HksParamSet *outParamSet = nullptr;
+    int32_t ret = HksInitParamSet(&outParamSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = GetKeyParamSet(&key, outParamSet);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO);
+    HksFreeParamSet(&outParamSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest033
+ * @tc.desc: tdd CheckExistingDeveloperId with mismatched developer id, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+#if defined(L2_STANDARD) && defined(HKS_SUPPORT_GET_BUNDLE_INFO)
+HWTEST_F(HksClientServiceTest, HksClientServiceTest033, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest033");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    const char *devA = "devA";
+    struct HksParam devIdParam = {
+        .tag = HKS_TAG_DEVELOPER_ID,
+        .blob = { strlen(devA), (uint8_t *)devA }
+    };
+    ret = HksAddParams(paramSet, &devIdParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    const char *devB = "devB";
+    struct HksBlob developerId = { strlen(devB), (uint8_t *)devB };
+    bool needAdd = true;
+    ret = CheckExistingDeveloperId(paramSet, &developerId, &needAdd);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+#endif
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest034
+ * @tc.desc: tdd StoreOrCopyKeyBlob without storage but too small outData, expect HKS_ERROR_INSUFFICIENT_MEMORY
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest034, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest034");
+    uint8_t outputBuf[] = { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88 };
+    struct HksBlob output = { sizeof(outputBuf), outputBuf };
+    uint8_t outDataBuf[4] = { 0 };
+    struct HksBlob outData = { sizeof(outDataBuf), outDataBuf };
+    int32_t ret = StoreOrCopyKeyBlob(nullptr, nullptr, &output, &outData, false);
+    EXPECT_EQ(ret, HKS_ERROR_INSUFFICIENT_MEMORY);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest035
+ * @tc.desc: tdd CheckWrapKeyType with invalid wrap type, expect HKS_ERROR_INVALID_KEY_WRAP_TYPE
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest035, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest035");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam wrapTypeParam = { .tag = HKS_TAG_KEY_WRAP_TYPE, .uint32Param = 0 };
+    ret = HksAddParams(paramSet, &wrapTypeParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    ret = CheckWrapKeyType(paramSet);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_KEY_WRAP_TYPE);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest036
+ * @tc.desc: tdd IsSeFromKeyBlob with invalid key blob, expect false
+ * @tc.type: FUNC
+ */
+#ifdef L2_STANDARD
+HWTEST_F(HksClientServiceTest, HksClientServiceTest036, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest036");
+    struct HksBlob keyFromFile = { 0, nullptr };
+    EXPECT_EQ(IsSeFromKeyBlob(&keyFromFile), false);
+}
+#endif
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest037
+ * @tc.desc: tdd CheckImportWrappedKeySeMatch with SE mismatch, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+#ifdef L2_STANDARD
+HWTEST_F(HksClientServiceTest, HksClientServiceTest037, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest037");
+    struct HksBlob wrappingKeyFromFile = { 0, nullptr };
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam seParam = { .tag = HKS_TAG_KEY_SECURITY_LEVEL, .uint32Param = HKS_KEY_SECURITY_LEVEL_SE };
+    ret = HksAddParams(paramSet, &seParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    ret = CheckImportWrappedKeySeMatch(&wrappingKeyFromFile, paramSet);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+#endif
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest038
+ * @tc.desc: tdd HksServiceSign with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest038, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest038");
+    const char *alias = "HksClientServiceTest038";
+    const struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t srcDataBuf[] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob srcData = { sizeof(srcDataBuf), srcDataBuf };
+    uint8_t signatureBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob signature = { sizeof(signatureBuf), signatureBuf };
+    int32_t ret = HksServiceSign(&processInfo, &keyAlias, paramSet, &srcData, &signature);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest039
+ * @tc.desc: tdd HksServiceVerify with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest039, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest039");
+    const char *alias = "HksClientServiceTest039";
+    const struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t srcDataBuf[] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob srcData = { sizeof(srcDataBuf), srcDataBuf };
+    uint8_t signatureBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob signature = { sizeof(signatureBuf), signatureBuf };
+    int32_t ret = HksServiceVerify(&processInfo, &keyAlias, paramSet, &srcData, &signature);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest040
+ * @tc.desc: tdd HksServiceEncrypt with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest040, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest040");
+    const char *alias = "HksClientServiceTest040";
+    const struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t plainBuf[] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob plainText = { sizeof(plainBuf), plainBuf };
+    uint8_t cipherBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob cipherText = { sizeof(cipherBuf), cipherBuf };
+    int32_t ret = HksServiceEncrypt(&processInfo, &keyAlias, paramSet, &plainText, &cipherText);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest041
+ * @tc.desc: tdd HksServiceDecrypt with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest041, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest041");
+    const char *alias = "HksClientServiceTest041";
+    const struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t cipherBuf[] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob cipherText = { sizeof(cipherBuf), cipherBuf };
+    uint8_t plainBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob plainText = { sizeof(plainBuf), plainBuf };
+    int32_t ret = HksServiceDecrypt(&processInfo, &keyAlias, paramSet, &cipherText, &plainText);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest042
+ * @tc.desc: tdd HksServiceAgreeKey with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest042, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest042");
+    const char *alias = "HksClientServiceTest042";
+    const struct HksBlob privateKey = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t peerBuf[] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob peerPublicKey = { sizeof(peerBuf), peerBuf };
+    uint8_t agreedBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob agreedKey = { sizeof(agreedBuf), agreedBuf };
+    int32_t ret = HksServiceAgreeKey(&processInfo, paramSet, &privateKey, &peerPublicKey, &agreedKey);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest043
+ * @tc.desc: tdd HksServiceDeriveKey with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest043, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest043");
+    const char *alias = "HksClientServiceTest043";
+    const struct HksBlob mainKey = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t derivedBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob derivedKey = { sizeof(derivedBuf), derivedBuf };
+    int32_t ret = HksServiceDeriveKey(&processInfo, paramSet, &mainKey, &derivedKey);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceTest.HksClientServiceTest044
+ * @tc.desc: tdd HksServiceMac with injected process name, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceTest, HksClientServiceTest044, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceTest044");
+    const char *alias = "HksClientServiceTest044";
+    const struct HksBlob key = { strlen(alias), (uint8_t *)alias };
+    struct HksProcessInfo processInfo = { g_userId, g_processName, g_userIdInt, 0, 0 };
+    struct HksParamSet *paramSet = BuildInjectedProcessNameParamSet("injected_process");
+    ASSERT_NE(paramSet, nullptr);
+    uint8_t srcDataBuf[] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob srcData = { sizeof(srcDataBuf), srcDataBuf };
+    uint8_t macBuf[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+    struct HksBlob mac = { sizeof(macBuf), macBuf };
+    int32_t ret = HksServiceMac(&processInfo, &key, paramSet, &srcData, &mac);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+    HksFreeParamSet(&paramSet);
+}
 }

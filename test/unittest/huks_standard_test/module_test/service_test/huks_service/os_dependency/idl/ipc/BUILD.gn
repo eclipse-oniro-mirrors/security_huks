@@ -26,6 +26,9 @@ ohos_unittest("service_ipc_test") {
     "src/huks_ipc_serialization_test.cpp",
     "src/huks_ipc_service_test.cpp",
     "src/huks_permission_check_test.cpp",
+    "src/hks_ipc_service_cert_chain_test.cpp",
+    "src/hks_message_handler_find_test.cpp",
+    "src/hks_response_test.cpp",
   ]
 
   configs = [
@@ -51,6 +54,7 @@ ohos_unittest("service_ipc_test") {
   if (huks_enable_ukey_config == true) {
     sources += [
       "src/hks_client_service_ipc_test.cpp",
+      "src/hks_ukey_async_submit_test.cpp",
       "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/src/hks_client_service_ipc.c",
       "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/src/hks_request.cpp",
       "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/src/hks_ipc_slice.c",
@@ -72,4 +76,8 @@ ohos_unittest("service_ipc_test") {
     "hilog:libhilog",
     "ipc:ipc_single",
   ]
+
+  if (os_level == "standard") {
+    external_deps += [ "samgr:samgr_proxy" ]
+  }
 }

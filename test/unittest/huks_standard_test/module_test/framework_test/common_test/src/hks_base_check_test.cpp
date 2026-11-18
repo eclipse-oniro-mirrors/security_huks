@@ -594,4 +594,334 @@ HWTEST_F(HksBaseCheckTest, HksBaseCheckTest019, TestSize.Level0)
     int32_t ret = HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_SM4, &values);
     ASSERT_EQ(ret, HKS_ERROR_INVALID_PADDING) << "HksCheckCipherMutableParams failed, ret = " << ret;
 }
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest035
+ * @tc.desc: tdd HksCheckSignature RSA SIGN/VERIFY size check
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest035, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest035");
+    uint8_t data[512] = { 0 };
+    struct HksBlob sigSmall = { .size = 10, .data = data };
+    struct HksBlob sigExact = { .size = 128, .data = data };
+    struct HksBlob sigLarge = { .size = 256, .data = data };
+    // RSA 1024: keySize / 8 = 128
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_SIGN, HKS_ALG_RSA, HKS_RSA_KEY_SIZE_1024, &sigSmall),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_SIGN, HKS_ALG_RSA, HKS_RSA_KEY_SIZE_1024, &sigExact), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_VERIFY, HKS_ALG_RSA, HKS_RSA_KEY_SIZE_1024, &sigLarge),
+        HKS_ERROR_INVALID_SIGNATURE_SIZE);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_VERIFY, HKS_ALG_RSA, HKS_RSA_KEY_SIZE_1024, &sigExact), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest036
+ * @tc.desc: tdd HksCheckSignature ECC SIGN/VERIFY size check
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest036, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest036");
+    uint8_t data[256] = { 0 };
+    struct HksBlob sigSmall = { .size = 10, .data = data };
+    struct HksBlob sigExact = { .size = 72, .data = data };
+    struct HksBlob sigLarge = { .size = 128, .data = data };
+    // ECC 256: r=32, s=32, threshold = 72
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_SIGN, HKS_ALG_ECC, HKS_ECC_KEY_SIZE_256, &sigSmall),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_SIGN, HKS_ALG_ECC, HKS_ECC_KEY_SIZE_256, &sigExact), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_VERIFY, HKS_ALG_ECC, HKS_ECC_KEY_SIZE_256, &sigLarge),
+        HKS_ERROR_INVALID_SIGNATURE_SIZE);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_VERIFY, HKS_ALG_ECC, HKS_ECC_KEY_SIZE_256, &sigExact), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest037
+ * @tc.desc: tdd HksCheckSignature ED25519 SIGN/VERIFY size check
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest037, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest037");
+    uint8_t data[128] = { 0 };
+    struct HksBlob sigSmall = { .size = 63, .data = data };
+    struct HksBlob sigExact = { .size = 64, .data = data };
+    // ED25519: HKS_SIGNATURE_MIN_SIZE = 64
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_SIGN, HKS_ALG_ED25519, 0, &sigSmall), HKS_ERROR_BUFFER_TOO_SMALL);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_SIGN, HKS_ALG_ED25519, 0, &sigExact), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_VERIFY, HKS_ALG_ED25519, 0, &sigSmall), HKS_ERROR_INVALID_SIGNATURE_SIZE);
+    ASSERT_EQ(HksCheckSignature(HKS_CMD_ID_VERIFY, HKS_ALG_ED25519, 0, &sigExact), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest038
+ * @tc.desc: tdd HksCheckCipherData AES block cipher size check
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest038, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest038");
+    uint8_t in[64] = { 0 };
+    uint8_t out[64] = { 0 };
+    struct HksBlob inData = { .size = 17, .data = in };
+    struct HksBlob inlineData = { .size = 16, .data = in };
+    struct HksBlob outSmall = { .size = 15, .data = out };
+    struct HksBlob outOk = { .size = 64, .data = out };
+
+    struct ParamsValues values = {};
+    values.mode = { true, HKS_MODE_CBC };
+    values.padding = { true, HKS_PADDING_NONE };
+    // ENCRYPT + NONE + inSize(17) not multiple of 16
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values, &inData, &outOk),
+        HKS_ERROR_INVALID_ARGUMENT);
+    // DECRYPT + NONE + inSize(17) not multiple of 16
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_DECRYPT, HKS_ALG_AES, &values, &inData, &outOk),
+        HKS_ERROR_INVALID_ARGUMENT);
+    // ENCRYPT + PKCS7 + outData too small
+    values.padding.value = HKS_PADDING_PKCS7;
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values, &inlineData, &outSmall),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    // DECRYPT + outData too small
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_DECRYPT, HKS_ALG_AES, &values, &inlineData, &outSmall),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    // ENCRYPT success path (NONE, inSize multiple of 16, outData large enough)
+    values.padding.value = HKS_PADDING_NONE;
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values, &inlineData, &outOk), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest039
+ * @tc.desc: tdd HksCheckCipherData DES/3DES/SM4 block cipher dispatch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest039, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest039");
+    uint8_t in[32] = { 0 };
+    uint8_t out[32] = { 0 };
+    struct HksBlob inData = { .size = 16, .data = in };
+    struct HksBlob outData = { .size = 32, .data = out };
+    struct ParamsValues values = {};
+    values.mode = { true, HKS_MODE_CBC };
+    values.padding = { true, HKS_PADDING_PKCS7 };
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_DES, &values, &inData, &outData), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_3DES, &values, &inData, &outData), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_SM4, &values, &inData, &outData), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest040
+ * @tc.desc: tdd HksCheckCipherData RSA NONE no-pad size check
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest040, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest040");
+    uint8_t in[300] = { 0 };
+    uint8_t out[300] = { 0 };
+    struct ParamsValues values = {};
+    values.keyLen = { true, HKS_RSA_KEY_SIZE_2048 };
+    values.padding = { true, HKS_PADDING_NONE };
+    // keySize = 2048 / 8 = 256
+    struct HksBlob inBig = { .size = 257, .data = in };
+    struct HksBlob inOk = { .size = 256, .data = in };
+    struct HksBlob outOk = { .size = 300, .data = out };
+    struct HksBlob outSmall = { .size = 255, .data = out };
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_RSA, &values, &inBig, &outOk),
+        HKS_ERROR_INVALID_ARGUMENT);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_RSA, &values, &inOk, &outSmall),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_RSA, &values, &inOk, &outOk), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest041
+ * @tc.desc: tdd HksCheckCipherData RSA OAEP size check
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest041, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest041");
+    uint8_t in[300] = { 0 };
+    uint8_t out[300] = { 0 };
+    struct ParamsValues values = {};
+    values.keyLen = { true, HKS_RSA_KEY_SIZE_2048 };
+    values.padding = { true, HKS_PADDING_OAEP };
+    values.digest = { true, HKS_DIGEST_SHA256 };
+    // keySize=256, digestLen=32, size=256-66=190
+    struct HksBlob in191 = { .size = 191, .data = in };
+    struct HksBlob in100 = { .size = 100, .data = in };
+    struct HksBlob in257 = { .size = 257, .data = in };
+    struct HksBlob in256 = { .size = 256, .data = in };
+    struct HksBlob out300 = { .size = 300, .data = out };
+    struct HksBlob out255 = { .size = 255, .data = out };
+    struct HksBlob out189 = { .size = 189, .data = out };
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_RSA, &values, &in191, &out300),
+        HKS_ERROR_INVALID_ARGUMENT);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_RSA, &values, &in100, &out255),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_DECRYPT, HKS_ALG_RSA, &values, &in257, &out300),
+        HKS_ERROR_INVALID_ARGUMENT);
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_DECRYPT, HKS_ALG_RSA, &values, &in256, &out189),
+        HKS_ERROR_BUFFER_TOO_SMALL);
+    // small key (512/8=64 <= 2*32+2=66) → INVALID_KEY_FILE
+    struct ParamsValues smallKey = {};
+    smallKey.keyLen = { true, HKS_RSA_KEY_SIZE_512 };
+    smallKey.padding = { true, HKS_PADDING_OAEP };
+    smallKey.digest = { true, HKS_DIGEST_SHA256 };
+    struct HksBlob inSmall = { .size = 10, .data = in };
+    ASSERT_EQ(HksCheckCipherData(HKS_CMD_ID_ENCRYPT, HKS_ALG_RSA, &smallKey, &inSmall, &out300),
+        HKS_ERROR_INVALID_KEY_FILE);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest042
+ * @tc.desc: tdd HksCheckCipherMutableParams AES CTR/ECB/GCM padding
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest042, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest042");
+    struct ParamsValues values = {};
+    values.purpose = { true, HKS_KEY_PURPOSE_ENCRYPT };
+    values.mode = { true, HKS_MODE_CTR };
+    values.padding = { true, HKS_PADDING_NONE };
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_ECB;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_GCM;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_CBC;
+    values.padding.value = HKS_PADDING_PSS;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values), HKS_ERROR_INVALID_PADDING);
+    values.mode.isAbsent = true;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_AES, &values), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest043
+ * @tc.desc: tdd HksCheckCipherMutableParams SM4 padding modes
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest043, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest043");
+    struct ParamsValues values = {};
+    values.purpose = { true, HKS_KEY_PURPOSE_ENCRYPT };
+    values.mode = { true, HKS_MODE_CTR };
+    values.padding = { true, HKS_PADDING_NONE };
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_SM4, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_ECB;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_SM4, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_OFB;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_SM4, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_CBC;
+    values.padding.value = HKS_PADDING_PSS;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_SM4, &values), HKS_ERROR_INVALID_PADDING);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest044
+ * @tc.desc: tdd HksCheckCipherMutableParams DES/3DES padding
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest044, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest044");
+    struct ParamsValues values = {};
+    values.purpose = { true, HKS_KEY_PURPOSE_ENCRYPT };
+    values.mode = { true, HKS_MODE_CBC };
+    values.padding = { true, HKS_PADDING_NONE };
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_DES, &values), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_3DES, &values), HKS_SUCCESS);
+    values.mode.value = HKS_MODE_ECB;
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_DES, &values), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherMutableParams(HKS_CMD_ID_ENCRYPT, HKS_ALG_3DES, &values), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest045
+ * @tc.desc: tdd HksCheckSignVerifyMutableParams RSA padding
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest045, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest045");
+    struct ParamsValues values = {};
+    values.purpose = { true, HKS_KEY_PURPOSE_SIGN };
+    values.padding = { true, HKS_PADDING_PSS };
+    ASSERT_EQ(HksCheckSignVerifyMutableParams(HKS_CMD_ID_SIGN, HKS_ALG_RSA, &values), HKS_SUCCESS);
+    values.padding.value = HKS_PADDING_PKCS7;
+    ASSERT_EQ(HksCheckSignVerifyMutableParams(HKS_CMD_ID_SIGN, HKS_ALG_RSA, &values),
+        HKS_ERROR_INVALID_PADDING);
+    ASSERT_EQ(HksCheckSignVerifyMutableParams(HKS_CMD_ID_SIGN, HKS_ALG_ECC, &values), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest046
+ * @tc.desc: tdd HksCheckCipherMaterialParams DES CBC 无 IV, expect HKS_ERROR_CHECK_GET_IV_FAIL
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest046, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest046");
+    struct ParamsValues values = {};
+    values.mode = { true, HKS_MODE_CBC };
+    struct HksParamSet *paramSet = nullptr;
+    ASSERT_EQ(HksInitParamSet(&paramSet), HKS_SUCCESS);
+    ASSERT_EQ(HksBuildParamSet(&paramSet), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherMaterialParams(HKS_ALG_DES, &values, paramSet), HKS_ERROR_CHECK_GET_IV_FAIL);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest047
+ * @tc.desc: tdd HksCheckCipherMaterialParams DES CBC IV 尺寸错, expect HKS_ERROR_INVALID_IV
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest047, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest047");
+    struct ParamsValues values = {};
+    values.mode = { true, HKS_MODE_CBC };
+    struct HksParamSet *paramSet = nullptr;
+    ASSERT_EQ(HksInitParamSet(&paramSet), HKS_SUCCESS);
+    uint8_t iv[8] = { 0 };
+    struct HksBlob ivBlob = { .size = sizeof(iv), .data = iv };
+    struct HksParam ivParam = { .tag = HKS_TAG_IV, .blob = ivBlob };
+    ASSERT_EQ(HksAddParams(paramSet, &ivParam, 1), HKS_SUCCESS);
+    ASSERT_EQ(HksBuildParamSet(&paramSet), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherMaterialParams(HKS_ALG_DES, &values, paramSet), HKS_ERROR_INVALID_IV);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest048
+ * @tc.desc: tdd HksCheckCipherMaterialParams 3DES CBC 无 IV, expect HKS_ERROR_CHECK_GET_IV_FAIL
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest048, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest048");
+    struct ParamsValues values = {};
+    values.mode = { true, HKS_MODE_CBC };
+    struct HksParamSet *paramSet = nullptr;
+    ASSERT_EQ(HksInitParamSet(&paramSet), HKS_SUCCESS);
+    ASSERT_EQ(HksBuildParamSet(&paramSet), HKS_SUCCESS);
+    ASSERT_EQ(HksCheckCipherMaterialParams(HKS_ALG_3DES, &values, paramSet), HKS_ERROR_CHECK_GET_IV_FAIL);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksBaseCheckTest.HksBaseCheckTest049
+ * @tc.desc: tdd CheckImportMutableParams ML_KEM 非 WRAP, expect HKS_ERROR_INVALID_PURPOSE
+ */
+HWTEST_F(HksBaseCheckTest, HksBaseCheckTest049, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksBaseCheckTest049");
+    struct ParamsValues values = {};
+    values.purpose = { true, HKS_KEY_PURPOSE_VERIFY };
+    ASSERT_EQ(CheckImportMutableParams(HKS_ALG_ML_KEM, &values), HKS_ERROR_INVALID_PURPOSE);
+    values.purpose.value = HKS_KEY_PURPOSE_WRAP;
+    ASSERT_EQ(CheckImportMutableParams(HKS_ALG_ML_KEM, &values), HKS_SUCCESS);
+}
 }

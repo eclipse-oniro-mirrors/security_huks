@@ -269,4 +269,146 @@ HWTEST_F(HksKeyBlobTest, HksKeyBlobTest011, TestSize.Level0)
     HksFreeParamSet(&paramSet);
 }
 #endif
+
+/**
+ * @tc.name: HksKeyBlobTest.HksKeyBlobTest012
+ * @tc.desc: tdd HksFreeKeyNode, expect return without crash for null or refCnt == 0
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksKeyBlobTest, HksKeyBlobTest012, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksKeyBlobTest012");
+    HksFreeKeyNode(nullptr);
+
+    struct HksKeyNode *keyNode = nullptr;
+    HksFreeKeyNode(&keyNode);
+    EXPECT_EQ(keyNode == nullptr, true);
+
+    keyNode = reinterpret_cast<struct HksKeyNode *>(HksMalloc(sizeof(struct HksKeyNode)));
+    ASSERT_EQ(keyNode == nullptr, false) << "HksKeyBlobTest012 keyNode malloc failed.";
+    keyNode->refCnt = 0;
+    HksFreeKeyNode(&keyNode);
+    EXPECT_EQ(keyNode == nullptr, false);
+    HKS_FREE(keyNode);
+}
+
+/**
+ * @tc.name: HksKeyBlobTest.HksKeyBlobTest013
+ * @tc.desc: tdd HksFreeKeyNode, expect free inactive node and set to nullptr
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksKeyBlobTest, HksKeyBlobTest013, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksKeyBlobTest013");
+    struct HksKeyNode *keyNode = reinterpret_cast<struct HksKeyNode *>(HksMalloc(sizeof(struct HksKeyNode)));
+    ASSERT_EQ(keyNode == nullptr, false) << "HksKeyBlobTest013 keyNode malloc failed.";
+    keyNode->paramSet = nullptr;
+    keyNode->refCnt = 1;
+    keyNode->status = HKS_KEYNODE_INACTIVE;
+    keyNode->handle = 0;
+    HksFreeKeyNode(&keyNode);
+    EXPECT_EQ(keyNode == nullptr, true);
+}
+
+/**
+ * @tc.name: HksKeyBlobTest.HksKeyBlobTest014
+ * @tc.desc: tdd EncryptAndDecryptKeyBlob, expect HKS_ERROR_INVALID_KEY_INFO
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksKeyBlobTest, HksKeyBlobTest014, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksKeyBlobTest014");
+    uint8_t keyData[sizeof(struct HksKeyBlobInfo) + 16] = { 0 };
+    struct HksParam keyParam = { .tag = HKS_TAG_KEY,
+        .blob = { .size = HKS_ARRAY_SIZE(keyData), .data = keyData } };
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksAddParams(paramSet, &keyParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob aad = { 0, nullptr };
+    ret = EncryptAndDecryptKeyBlob(&aad, paramSet, true);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO);
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksKeyBlobTest.HksKeyBlobTest015
+ * @tc.desc: tdd HksGetRawKey, expect HKS_ERROR_INVALID_KEY_INFO
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksKeyBlobTest, HksKeyBlobTest015, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksKeyBlobTest015");
+    uint8_t keyData[sizeof(struct HksKeyBlobInfo) + 16] = { 0 };
+    struct HksParam keyParam = { .tag = HKS_TAG_KEY,
+        .blob = { .size = HKS_ARRAY_SIZE(keyData), .data = keyData } };
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksAddParams(paramSet, &keyParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob rawKey = { 0, nullptr };
+    ret = HksGetRawKey(paramSet, &rawKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO);
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksKeyBlobTest.HksKeyBlobTest016
+ * @tc.desc: tdd HksGetAadAndParamSet, expect HKS_ERROR_PARAM_NOT_EXIST
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksKeyBlobTest, HksKeyBlobTest016, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksKeyBlobTest016");
+    struct HksParam purposeParam = { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT };
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksAddParams(paramSet, &purposeParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob inData = { .size = paramSet->paramSetSize, .data = reinterpret_cast<uint8_t *>(paramSet) };
+    struct HksBlob aad = { 0, nullptr };
+    struct HksParamSet *outParamSet = nullptr;
+    ret = HksGetAadAndParamSet(&inData, &aad, &outParamSet);
+    ASSERT_EQ(ret, HKS_ERROR_PARAM_NOT_EXIST);
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksKeyBlobTest.HksKeyBlobTest017
+ * @tc.desc: tdd HksCoreInitAuthTokenKey/HksGetAuthTokenKey/HksCoreDestroyAuthTokenKey, expect HKS_SUCCESS
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksKeyBlobTest, HksKeyBlobTest017, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksKeyBlobTest017");
+    HksCoreDestroyAuthTokenKey();
+
+    int32_t ret = HksCoreInitAuthTokenKey();
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    ret = HksCoreInitAuthTokenKey();
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksAuthTokenKey authTokenKey;
+    ret = HksGetAuthTokenKey(&authTokenKey);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksCoreDestroyAuthTokenKey();
+}
+
 }

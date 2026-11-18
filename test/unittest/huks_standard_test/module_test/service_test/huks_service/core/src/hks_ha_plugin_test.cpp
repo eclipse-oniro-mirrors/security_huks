@@ -163,4 +163,18 @@ HWTEST_F(HksHaPluginTest, HksHaPluginTest002, TestSize.Level0)
     EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "register events should be failed";
 }
 
+/**
+ * @tc.name: HksHaPluginTest.HksHaPluginTest003
+ * @tc.desc: test register event proc and enqueue event with null pointer
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksHaPluginTest, HksHaPluginTest003, TestSize.Level0)
+{
+    int32_t ret = HksRegisterEventProcWrapper(nullptr);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "procMap should be nullptr";
+
+    ret = HksEnqueueEventWrapper(1000, nullptr);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "paramSet should be nullptr";
+}
+
 }

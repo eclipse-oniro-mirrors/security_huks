@@ -717,9 +717,7 @@ HWTEST_F(HksAncoCertStoreTest, Remove_UsrPkeyPrefix_RewritesAlias, TestSize.Leve
  */
 HWTEST_F(HksAncoCertStoreTest, Remove_NullAlias_Noop, TestSize.Level0)
 {
-    HksCertChainStoreRemove(TEST_UID, NULL);
-    // 不崩溃即通过
-    SUCCEED();
+    EXPECT_NO_FATAL_FAILURE((HksCertChainStoreRemove(TEST_UID, NULL)));
 }
 
 /**
@@ -734,5 +732,243 @@ HWTEST_F(HksAncoCertStoreTest, LoadChallenge_NotExist, TestSize.Level0)
     struct HksBlob challenge = { 0, NULL };
     int32_t ret = HksCertChainStoreLoadChallenge(TEST_UID, &keyAlias, &challenge);
     EXPECT_EQ(ret, HKS_ERROR_NOT_EXIST);
+}
+
+// ===================== 非法参数 / null / 非法长度 分支 =====================
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Save_InvalidAlias
+ * @tc.desc: alias data 为 NULL 或 size 为 0, Save 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Save_InvalidAlias, TestSize.Level0)
+{
+    uint8_t certData[] = {0x01};
+    struct HksBlob certChain = { sizeof(certData), certData };
+
+    uint8_t buf[5] = {0x41, 0x42, 0x43, 0x44, 0x45};
+    struct HksBlob nullDataAlias = { sizeof(buf), nullptr };
+    EXPECT_EQ(HksCertChainStoreSave(TEST_UID, &nullDataAlias, &certChain), HKS_ERROR_INVALID_ARGUMENT);
+
+    struct HksBlob zeroSizeAlias = { 0, buf };
+    EXPECT_EQ(HksCertChainStoreSave(TEST_UID, &zeroSizeAlias, &certChain), HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Save_CertDataNull
+ * @tc.desc: certChain data 为 NULL 但 size > 0, Save 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Save_CertDataNull, TestSize.Level0)
+{
+    const char *alias = "CERTCHAIN_nulldata_test";
+    struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    uint8_t certData[] = {0x01};
+    struct HksBlob nullChain = { sizeof(certData), nullptr };
+    EXPECT_EQ(HksCertChainStoreSave(TEST_UID, &keyAlias, &nullChain), HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Save_LongAlias
+ * @tc.desc: 超长 alias 导致文件名溢出, Save 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Save_LongAlias, TestSize.Level0)
+{
+    uint8_t longAliasData[600] = {0};
+    for (uint32_t i = 0; i < sizeof(longAliasData); i++) {
+        longAliasData[i] = (uint8_t)('A' + (i % 26));
+    }
+    struct HksBlob longAlias = { sizeof(longAliasData), longAliasData };
+    uint8_t certData[] = {0x01};
+    struct HksBlob certChain = { sizeof(certData), certData };
+    EXPECT_EQ(HksCertChainStoreSave(TEST_UID, &longAlias, &certChain), HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.LoadCertChain_NullArgs
+ * @tc.desc: keyAlias 或 certChain 为 NULL, LoadCertChain 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, LoadCertChain_NullArgs, TestSize.Level0)
+{
+    const char *alias = "CERTCHAIN_nullargs_test";
+    struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    struct HksBlob loaded = { 0, NULL };
+    EXPECT_EQ(HksCertChainStoreLoadCertChain(TEST_UID, NULL, &loaded), HKS_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(HksCertChainStoreLoadCertChain(TEST_UID, &keyAlias, NULL), HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.LoadCertChain_InvalidAlias
+ * @tc.desc: alias data 为 NULL 或 size 为 0, LoadCertChain 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, LoadCertChain_InvalidAlias, TestSize.Level0)
+{
+    uint8_t buf[5] = {0x41, 0x42, 0x43, 0x44, 0x45};
+    struct HksBlob nullDataAlias = { sizeof(buf), nullptr };
+    struct HksBlob loaded = { 0, NULL };
+    EXPECT_EQ(HksCertChainStoreLoadCertChain(TEST_UID, &nullDataAlias, &loaded), HKS_ERROR_INVALID_ARGUMENT);
+
+    struct HksBlob zeroSizeAlias = { 0, buf };
+    EXPECT_EQ(HksCertChainStoreLoadCertChain(TEST_UID, &zeroSizeAlias, &loaded), HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.LoadChallenge_NullArgs
+ * @tc.desc: keyAlias 或 challenge 为 NULL, LoadChallenge 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, LoadChallenge_NullArgs, TestSize.Level0)
+{
+    const char *alias = "CERTCHAIN_chal_nullargs";
+    struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    struct HksBlob challenge = { 0, NULL };
+    EXPECT_EQ(HksCertChainStoreLoadChallenge(TEST_UID, NULL, &challenge), HKS_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(HksCertChainStoreLoadChallenge(TEST_UID, &keyAlias, NULL), HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Load_LongAlias
+ * @tc.desc: 超长 alias 导致文件名溢出, Load 返回 HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Load_LongAlias, TestSize.Level0)
+{
+    uint8_t longAliasData[600] = {0};
+    for (uint32_t i = 0; i < sizeof(longAliasData); i++) {
+        longAliasData[i] = (uint8_t)('A' + (i % 26));
+    }
+    struct HksBlob longAlias = { sizeof(longAliasData), longAliasData };
+    struct HksBlob loaded = { 0, NULL };
+    EXPECT_EQ(HksCertChainStoreLoadCertChain(TEST_UID, &longAlias, &loaded), HKS_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(loaded.data, nullptr);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.OnAttestSuccess_InvalidAlias
+ * @tc.desc: alias data 为 NULL 或 size 为 0, BuildCertChainAlias 失败导致静默跳过
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, OnAttestSuccess_InvalidAlias, TestSize.Level0)
+{
+    struct HksParamSet *paramSet = NULL;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_ATTESTATION_MODE, .uint32Param = HKS_ATTESTATION_MODE_DEFAULT }
+    };
+    ret = HksAddParams(paramSet, params, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint8_t certData[] = {0x30, 0x82};
+    struct HksBlob certChain = { sizeof(certData), certData };
+
+    uint8_t buf[5] = {0x41, 0x42, 0x43, 0x44, 0x45};
+    struct HksBlob nullDataAlias = { sizeof(buf), nullptr };
+    HksCertChainStoreOnAttestSuccess(TEST_UID, &nullDataAlias, paramSet, &certChain);
+    EXPECT_FALSE(HksCertChainStoreContains(TEST_UID, &nullDataAlias));
+
+    struct HksBlob zeroSizeAlias = { 0, buf };
+    HksCertChainStoreOnAttestSuccess(TEST_UID, &zeroSizeAlias, paramSet, &certChain);
+    EXPECT_FALSE(HksCertChainStoreContains(TEST_UID, &zeroSizeAlias));
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.OnAttestSuccess_CertDataNull
+ * @tc.desc: certChain data 为 NULL 但 size > 0, 静默跳过
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, OnAttestSuccess_CertDataNull, TestSize.Level0)
+{
+    const char *alias = "CERTCHAIN_nullchain_test";
+    struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+
+    struct HksParamSet *paramSet = NULL;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_ATTESTATION_MODE, .uint32Param = HKS_ATTESTATION_MODE_DEFAULT }
+    };
+    ret = HksAddParams(paramSet, params, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint8_t certData[] = {0x30};
+    struct HksBlob nullChain = { sizeof(certData), nullptr };
+    HksCertChainStoreOnAttestSuccess(TEST_UID, &keyAlias, paramSet, &nullChain);
+    EXPECT_FALSE(HksCertChainStoreContains(TEST_UID, &keyAlias));
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Remove_NonUsrpkeyAlias
+ * @tc.desc: 非 USRPKEY 前缀 alias, Remove 走直删分支不崩溃
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Remove_NonUsrpkeyAlias, TestSize.Level0)
+{
+    const char *alias = "CERTCHAIN_remove_plain";
+    struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    EXPECT_NO_FATAL_FAILURE((HksCertChainStoreRemove(TEST_UID, &keyAlias)));
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Remove_ShortAlias
+ * @tc.desc: 短 alias (size < 前缀长度), Remove 走 BlobHasPrefix size 分支不崩溃
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Remove_ShortAlias, TestSize.Level0)
+{
+    const char *alias = "abc";
+    struct HksBlob keyAlias = { strlen(alias), (uint8_t *)alias };
+    EXPECT_NO_FATAL_FAILURE((HksCertChainStoreRemove(TEST_UID, &keyAlias)));
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Remove_InvalidAlias
+ * @tc.desc: alias data 为 NULL 或 size 为 0, Remove 静默不崩溃
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Remove_InvalidAlias, TestSize.Level0)
+{
+    uint8_t buf[5] = {0x41, 0x42, 0x43, 0x44, 0x45};
+    struct HksBlob nullDataAlias = { sizeof(buf), nullptr };
+    EXPECT_NO_FATAL_FAILURE((HksCertChainStoreRemove(TEST_UID, &nullDataAlias)));
+
+    struct HksBlob zeroSizeAlias = { 0, buf };
+    EXPECT_NO_FATAL_FAILURE((HksCertChainStoreRemove(TEST_UID, &zeroSizeAlias)));
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Contains_NullAlias
+ * @tc.desc: keyAlias 为 NULL, Contains 返回 false
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Contains_NullAlias, TestSize.Level0)
+{
+    EXPECT_FALSE(HksCertChainStoreContains(TEST_UID, NULL));
+}
+
+/**
+ * @tc.name: HksAncoCertStoreTest.Contains_InvalidAlias
+ * @tc.desc: alias data 为 NULL 或 size 为 0, Contains 返回 false
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAncoCertStoreTest, Contains_InvalidAlias, TestSize.Level0)
+{
+    uint8_t buf[5] = {0x41, 0x42, 0x43, 0x44, 0x45};
+    struct HksBlob nullDataAlias = { sizeof(buf), nullptr };
+    EXPECT_FALSE(HksCertChainStoreContains(TEST_UID, &nullDataAlias));
+
+    struct HksBlob zeroSizeAlias = { 0, buf };
+    EXPECT_FALSE(HksCertChainStoreContains(TEST_UID, &zeroSizeAlias));
 }
 } // namespace Unittest::HksAncoCertStoreTest

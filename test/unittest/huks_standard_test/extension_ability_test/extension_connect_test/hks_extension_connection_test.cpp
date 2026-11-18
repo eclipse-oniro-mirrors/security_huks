@@ -111,6 +111,58 @@ HWTEST_F(ExtensionConnectionTest, ExtensionConnectionTest003, TestSize.Level0) {
     EXPECT_FALSE(connection_->IsConnected());
 }
 
+/**
+ * @tc.name: ExtensionConnectionTest.ExtensionConnectionTest004
+ * @tc.desc: OnAbilityConnectDone with null remoteObject.
+ * @tc.type: FUNC
+ */
+HWTEST_F(ExtensionConnectionTest, ExtensionConnectionTest004, TestSize.Level0) {
+    AppExecFwk::ElementName element;
+    connection_->OnAbilityConnectDone(element, nullptr, 0);
+    EXPECT_FALSE(connection_->IsConnected());
+    EXPECT_EQ(connection_->GetRemoteObject(), nullptr);
+}
+
+/**
+ * @tc.name: ExtensionConnectionTest.ExtensionConnectionTest005
+ * @tc.desc: OnDisconnect without a prior connection.
+ * @tc.type: FUNC
+ */
+HWTEST_F(ExtensionConnectionTest, ExtensionConnectionTest005, TestSize.Level0) {
+    connection_->OnDisconnect(connection_);
+    EXPECT_FALSE(connection_->IsConnected());
+}
+
+/**
+ * @tc.name: ExtensionConnectionTest.ExtensionConnectionTest006
+ * @tc.desc: ExtensionDeathRecipient OnRemoteDied with null handler.
+ * @tc.type: FUNC
+ */
+HWTEST_F(ExtensionConnectionTest, ExtensionConnectionTest006, TestSize.Level0) {
+    ExtensionDeathRecipient recipient(nullptr);
+    wptr<MockIRemoteObject> mockIRemoteObject = new MockIRemoteObject();
+    EXPECT_NO_FATAL_FAILURE(recipient.OnRemoteDied(mockIRemoteObject));
+}
+
+/**
+ * @tc.name: ExtensionConnectionTest.ExtensionConnectionTest007
+ * @tc.desc: OnRemoteDied with a stale/null-promoting remote object.
+ * @tc.type: FUNC
+ */
+HWTEST_F(ExtensionConnectionTest, ExtensionConnectionTest007, TestSize.Level0) {
+    std::thread connectThread(&ExtensionConnectionTest::SimulateAbilityConnectResponse, this);
+    int32_t result = connection_->OnConnection(want_, connection_, userId_);
+    if (connectThread.joinable()) {
+        connectThread.join();
+    }
+    EXPECT_EQ(result, HKS_SUCCESS);
+    EXPECT_NE(connection_->GetRemoteObject(), nullptr);
+
+    // A raw wptr that promotes to null (not backed by a live sptr) exercises object==null path.
+    wptr<MockIRemoteObject> deadRemote;
+    connection_->OnRemoteDied(deadRemote);
+}
+
 }
 }
 }

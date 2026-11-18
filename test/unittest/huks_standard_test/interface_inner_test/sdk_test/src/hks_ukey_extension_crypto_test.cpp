@@ -455,9 +455,92 @@ HWTEST_F(HksUkeyExtensionCryptoTest, HksGetResourceIdTest001, TestSize.Level0)
 
 HWTEST_F(HksUkeyExtensionCryptoTest, HksGetUkeyGlobalErrorTest001, TestSize.Level0)
 {
-    char testBuf[] = "this is a test err info";
     int32_t errVal = 0;
-    (void)HksGetUkeyGlobalInfo(&errVal, testBuf, 0);
-    (void)HksClearUkeyGlobalInfo();
+    char testBuf[64] = {0};
+    HksSetUkeyGlobalInfo(12345, "test error info");
+    HksGetUkeyGlobalInfo(&errVal, testBuf, 0);
+    EXPECT_EQ(errVal, 0);
+    HksGetUkeyGlobalInfo(&errVal, testBuf, sizeof(testBuf));
+    EXPECT_EQ(errVal, 12345);
+    HksClearUkeyGlobalInfo();
+    HksGetUkeyGlobalInfo(&errVal, testBuf, sizeof(testBuf));
+    EXPECT_EQ(errVal, 0);
+}
+/**
+ * @tc.name: HksUkeyExtensionCryptoTest.HksGetCertChainNullArg
+ * @tc.desc: tdd HksGetCertChain with null args hits the parameter validation branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyExtensionCryptoTest, HksGetCertChainNullArg, TestSize.Level0)
+{
+    struct HksBlob certChain = { 0, nullptr };
+    int32_t ret = HksGetCertChain(nullptr, nullptr, &certChain);
+    EXPECT_NE(ret, HKS_SUCCESS);
+    ret = HksGetCertChain(nullptr, nullptr, nullptr);
+    EXPECT_NE(ret, HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksUkeyExtensionCryptoTest.HksGetAnonCertChainNullArg
+ * @tc.desc: tdd HksGetAnonCertChain with null args hits the parameter validation branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyExtensionCryptoTest, HksGetAnonCertChainNullArg, TestSize.Level0)
+{
+    struct HksBlob certChain = { 0, nullptr };
+    int32_t ret = HksGetAnonCertChain(nullptr, nullptr, &certChain);
+    EXPECT_NE(ret, HKS_SUCCESS);
+    ret = HksGetAnonCertChain(nullptr, nullptr, nullptr);
+    EXPECT_NE(ret, HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksUkeyExtensionCryptoTest.HksSetStorageNullArg
+ * @tc.desc: tdd HksSetStorage with null args hits the parameter validation branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyExtensionCryptoTest, HksSetStorageNullArg, TestSize.Level0)
+{
+    struct HksBlob data = { 0, nullptr };
+    int32_t ret = HksSetStorage(nullptr, nullptr, &data);
+    EXPECT_NE(ret, HKS_SUCCESS);
+    ret = HksSetStorage(nullptr, nullptr, nullptr);
+    EXPECT_NE(ret, HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksUkeyExtensionCryptoTest.HksGetStorageNullArg
+ * @tc.desc: tdd HksGetStorage with null args hits the parameter validation branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyExtensionCryptoTest, HksGetStorageNullArg, TestSize.Level0)
+{
+    struct HksBlob data = { 0, nullptr };
+    int32_t ret = HksGetStorage(nullptr, nullptr, &data);
+    EXPECT_NE(ret, HKS_SUCCESS);
+    ret = HksGetStorage(nullptr, nullptr, nullptr);
+    EXPECT_NE(ret, HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksUkeyExtensionCryptoTest.HksStorageExistNullArg
+ * @tc.desc: tdd HksStorageExist with null args hits the parameter validation branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyExtensionCryptoTest, HksStorageExistNullArg, TestSize.Level0)
+{
+    int32_t ret = HksStorageExist(nullptr, nullptr);
+    EXPECT_NE(ret, HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksUkeyExtensionCryptoTest.HksChangeStorageLevelNullArg
+ * @tc.desc: tdd HksChangeStorageLevel with null args hits the parameter validation branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyExtensionCryptoTest, HksChangeStorageLevelNullArg, TestSize.Level0)
+{
+    int32_t ret = HksChangeStorageLevel(nullptr, nullptr, nullptr);
+    EXPECT_NE(ret, HKS_SUCCESS);
 }
 }

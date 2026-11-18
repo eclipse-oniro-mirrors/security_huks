@@ -728,6 +728,205 @@ HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest019, TestSize.Level0)
     HKS_FREE_BLOB(processInfo.processName);
 }
 
+// ==================== HksServiceOnUkey* service-side tests ====================
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest020
+ * @tc.desc: HksServiceOnUkeyGenerateKey - success and oversized keyAlias.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest020, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    std::string idx = "key1";
+    HksBlob keyAlias = { .size = static_cast<uint32_t>(idx.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(idx.data())) };
+    EXPECT_EQ(HksServiceOnUkeyGenerateKey(&processInfo, &keyAlias, paramSet), HKS_SUCCESS);
+
+    std::string longIdx(1025, 'k');
+    HksBlob longAlias = { .size = static_cast<uint32_t>(longIdx.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(longIdx.data())) };
+    EXPECT_EQ(HksServiceOnUkeyGenerateKey(&processInfo, &longAlias, paramSet), HKS_ERROR_INVALID_ARGUMENT);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest021
+ * @tc.desc: HksServiceOnUkeyInitSession - handle too small and success.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest021, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    std::string idx = "idx";
+    HksBlob index = { .size = static_cast<uint32_t>(idx.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(idx.data())) };
+
+    uint8_t smallBuf[4] = {0};
+    HksBlob smallHandle = { .size = 4, .data = smallBuf };
+    EXPECT_EQ(HksServiceOnUkeyInitSession(&processInfo, &index, paramSet, &smallHandle),
+        HKS_ERROR_INSUFFICIENT_MEMORY);
+
+    uint8_t bigBuf[8] = {0};
+    HksBlob bigHandle = { .size = 8, .data = bigBuf };
+    EXPECT_EQ(HksServiceOnUkeyInitSession(&processInfo, &index, paramSet, &bigHandle), HKS_SUCCESS);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest022
+ * @tc.desc: HksServiceOnUkeyUpdateSession - empty outData and success.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest022, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    uint8_t handleBuf[8] = {0};
+    HksBlob handle = { .size = 8, .data = handleBuf };
+    std::string inStr = "in";
+    HksBlob inData = { .size = static_cast<uint32_t>(inStr.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(inStr.data())) };
+
+    HksBlob emptyOut = { .size = 0, .data = nullptr };
+    EXPECT_EQ(HksServiceOnUkeyUpdateSession(&processInfo, &handle, paramSet, &inData, &emptyOut), HKS_SUCCESS);
+
+    uint8_t outBuf[1] = {0};
+    HksBlob okOut = { .size = 1, .data = outBuf };
+    EXPECT_EQ(HksServiceOnUkeyUpdateSession(&processInfo, &handle, paramSet, &inData, &okOut), HKS_SUCCESS);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest023
+ * @tc.desc: HksServiceOnUkeyFinishSession - empty outData and success.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest023, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    uint8_t handleBuf[8] = {0};
+    HksBlob handle = { .size = 8, .data = handleBuf };
+    std::string inStr = "in";
+    HksBlob inData = { .size = static_cast<uint32_t>(inStr.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(inStr.data())) };
+
+    HksBlob emptyOut = { .size = 0, .data = nullptr };
+    EXPECT_EQ(HksServiceOnUkeyFinishSession(&processInfo, &handle, paramSet, &inData, &emptyOut), HKS_SUCCESS);
+
+    uint8_t outBuf[1] = {0};
+    HksBlob okOut = { .size = 1, .data = outBuf };
+    EXPECT_EQ(HksServiceOnUkeyFinishSession(&processInfo, &handle, paramSet, &inData, &okOut), HKS_SUCCESS);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest024
+ * @tc.desc: HksServiceOnUkeyAbortSession - success.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest024, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    uint8_t handleBuf[8] = {0};
+    HksBlob handle = { .size = 8, .data = handleBuf };
+    EXPECT_EQ(HksServiceOnUkeyAbortSession(&processInfo, &handle, paramSet), HKS_SUCCESS);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest025
+ * @tc.desc: HksServiceOnUkeyImportWrappedKey - success and oversized keyAlias.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest025, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    std::string keyStr = "key1";
+    HksBlob keyAlias = { .size = static_cast<uint32_t>(keyStr.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(keyStr.data())) };
+    std::string wrapStr = "wrap1";
+    HksBlob wrapAlias = { .size = static_cast<uint32_t>(wrapStr.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(wrapStr.data())) };
+    std::string dataStr = "wrapped";
+    HksBlob wrappedData = { .size = static_cast<uint32_t>(dataStr.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(dataStr.data())) };
+
+    EXPECT_EQ(HksServiceOnUkeyImportWrappedKey(&processInfo, &keyAlias, &wrapAlias, paramSet, &wrappedData),
+        HKS_SUCCESS);
+
+    std::string longIdx(1025, 'k');
+    HksBlob longAlias = { .size = static_cast<uint32_t>(longIdx.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(longIdx.data())) };
+    EXPECT_EQ(HksServiceOnUkeyImportWrappedKey(&processInfo, &longAlias, &wrapAlias, paramSet, &wrappedData),
+        HKS_ERROR_INVALID_ARGUMENT);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
+/**
+ * @tc.name: HksUkeyClientServiceTest.HksUkeyClientServiceTest026
+ * @tc.desc: HksServiceOnUkeyExportPublicKey - success and oversized keyAlias.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksUkeyClientServiceTest, HksUkeyClientServiceTest026, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    HksGetProcessInfoForIPC(&processInfo);
+    HksParamSet *paramSet = nullptr;
+    HksInitParamSet(&paramSet);
+
+    std::string keyStr = "key1";
+    HksBlob keyAlias = { .size = static_cast<uint32_t>(keyStr.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(keyStr.data())) };
+    uint8_t keyBuf[8] = {0};
+    HksBlob key = { .size = 8, .data = keyBuf };
+
+    EXPECT_EQ(HksServiceOnUkeyExportPublicKey(&processInfo, &keyAlias, paramSet, &key), HKS_SUCCESS);
+
+    std::string longIdx(1025, 'k');
+    HksBlob longAlias = { .size = static_cast<uint32_t>(longIdx.size()),
+        .data = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(longIdx.data())) };
+    EXPECT_EQ(HksServiceOnUkeyExportPublicKey(&processInfo, &longAlias, paramSet, &key), HKS_ERROR_INVALID_ARGUMENT);
+
+    HksFreeParamSet(&paramSet);
+    HKS_FREE_BLOB(processInfo.userId);
+    HKS_FREE_BLOB(processInfo.processName);
+}
+
 } // namespace Huks
 } // namespace Security
 } // namespace OHOS

@@ -26,7 +26,10 @@ if (huks_enable_ukey_config == true) {
       "../provider_mgr_test/hks_ukey_system_adapter_mock.cpp",
       "./hks_plugin_lifecycle_manager_mock.cpp",
       "./hks_ukey_client_service_test.cpp",
+      "./hks_ukey_async_task_mock.cpp",
+      "./hks_ukey_async_task_test.cpp",
       "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/src/hks_ukey_service_adapter.cpp",
+      "//base/security/huks/services/huks_standard/huks_service/extension/ukey_client_service/src/hks_ukey_async_task.cpp",
     ]
 
     configs = [
