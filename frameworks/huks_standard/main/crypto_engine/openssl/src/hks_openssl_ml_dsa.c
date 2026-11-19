@@ -187,20 +187,158 @@ int32_t HksOpensslMlDsaGetPubKey(const struct HksBlob *keyIn, struct HksBlob *ke
 #endif
 
 #ifdef HKS_SUPPORT_ML_DSA_SIGN_VERIFY
-#define ML_DSA_CONTEXT "context-string"
+#define ML_DSA_CONTEXT_STRING       "context-string"
+#define ML_DSA_MESSAGE_ENCODING     "message-encoding"
+#define ML_DSA_MU                   "mu"
+#define ML_DSA_MSG_ENCODE_RAW       0
+#define ML_DSA_PREHASH_DOMAIN_SEP   1
 
-static int32_t MlDsaSetContextParam(EVP_PKEY_CTX *ctx, const struct HksUsageSpec *usageSpec)
+typedef struct MlDsaPreHashParam {
+    uint32_t digest;
+    uint32_t digestLen;
+    const uint8_t *oid;
+    uint32_t oidLen;
+} MlDsaPreHashParam;
+
+/*
+ * The DER encoding of the object identifier of the pre-hash function, see FIPS 204 section 5.4.
+ * HashML-DSA signs 0x01 || len(ctx) || ctx || OID(PH) || PH(M).
+ */
+static const uint8_t g_mlDsaSha256Oid[] = { 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x01 };
+static const uint8_t g_mlDsaSha384Oid[] = { 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x02 };
+static const uint8_t g_mlDsaSha512Oid[] = { 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x03 };
+static const uint8_t g_mlDsaShake128Oid[] = { 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0B };
+static const uint8_t g_mlDsaShake256Oid[] = { 0x06, 0x09, 0x60, 0x86, 0x48, 0x01, 0x65, 0x03, 0x04, 0x02, 0x0C };
+
+static const MlDsaPreHashParam g_mlDsaPreHashParam[] = {
+    { HKS_DIGEST_SHA256, HKS_DIGEST_SHA256_LEN, g_mlDsaSha256Oid, sizeof(g_mlDsaSha256Oid) },
+    { HKS_DIGEST_SHA384, HKS_DIGEST_SHA384_LEN, g_mlDsaSha384Oid, sizeof(g_mlDsaSha384Oid) },
+    { HKS_DIGEST_SHA512, HKS_DIGEST_SHA512_LEN, g_mlDsaSha512Oid, sizeof(g_mlDsaSha512Oid) },
+#ifndef HKS_CHIPSET_API
+    { HKS_DIGEST_SHAKE128, HKS_DIGEST_SHAKE128_LEN, g_mlDsaShake128Oid, sizeof(g_mlDsaShake128Oid) },
+    { HKS_DIGEST_SHAKE256, HKS_DIGEST_SHAKE256_LEN, g_mlDsaShake256Oid, sizeof(g_mlDsaShake256Oid) },
+#endif
+};
+
+static const MlDsaPreHashParam *MlDsaGetPreHashParam(uint32_t digest)
+{
+    for (uint32_t i = 0; i < HKS_ARRAY_SIZE(g_mlDsaPreHashParam); i++) {
+        if (g_mlDsaPreHashParam[i].digest == digest) {
+            return &g_mlDsaPreHashParam[i];
+        }
+    }
+    return NULL;
+}
+
+/*
+ * Builds the HashML-DSA formatted message M' = 0x01 || len(ctx) || ctx || OID(PH) || PH(M).
+ * message is the digest PH(M) computed by the caller, its length must match the selected hash.
+ * The resulting buffer is owned by the caller and must be freed with HKS_FREE_BLOB.
+ */
+static int32_t MlDsaBuildPreHashMessage(const struct HksBlob *message, const struct HksBlob *context,
+    const MlDsaPreHashParam *preHashParam, struct HksBlob *encodedMessage)
+{
+    HKS_IF_TRUE_LOGE_RETURN(message->size != preHashParam->digestLen, HKS_ERROR_INVALID_ARGUMENT,
+        "invalid ml-dsa prehash size %" LOG_PUBLIC "u, expect %" LOG_PUBLIC "u",
+        message->size, preHashParam->digestLen)
+
+    uint32_t ctxLen = (context == NULL) ? 0 : context->size;
+    uint32_t totalLen = 2 + ctxLen + preHashParam->oidLen + preHashParam->digestLen;
+    uint8_t *buffer = (uint8_t *)HksMalloc(totalLen);
+    HKS_IF_NULL_LOGE_RETURN(buffer, HKS_ERROR_MALLOC_FAIL, "ml-dsa prehash message malloc failed")
+
+    uint32_t offset = 0;
+    buffer[offset++] = ML_DSA_PREHASH_DOMAIN_SEP;
+    buffer[offset++] = (uint8_t)ctxLen;
+    if ((ctxLen != 0) && (context->data != NULL)) {
+        if (memcpy_s(buffer + offset, totalLen - offset, context->data, ctxLen) != EOK) {
+            HKS_LOG_E("copy ml-dsa context failed");
+            (void)memset_s(buffer, totalLen, 0, totalLen);
+            HKS_FREE(buffer);
+            return HKS_ERROR_INVALID_OPERATION;
+        }
+        offset += ctxLen;
+    }
+    if (memcpy_s(buffer + offset, totalLen - offset, preHashParam->oid, preHashParam->oidLen) != EOK) {
+        HKS_LOG_E("copy ml-dsa prehash oid failed");
+        (void)memset_s(buffer, totalLen, 0, totalLen);
+        HKS_FREE(buffer);
+        return HKS_ERROR_INVALID_OPERATION;
+    }
+    offset += preHashParam->oidLen;
+    if (memcpy_s(buffer + offset, totalLen - offset, message->data, message->size) != EOK) {
+        HKS_LOG_E("copy ml-dsa prehash digest failed");
+        (void)memset_s(buffer, totalLen, 0, totalLen);
+        HKS_FREE(buffer);
+        return HKS_ERROR_INVALID_OPERATION;
+    }
+
+    encodedMessage->data = buffer;
+    encodedMessage->size = totalLen;
+    return HKS_SUCCESS;
+}
+
+/*
+ * For pre-hash mode the caller supplied digest is formatted into M', which OpenSSL must sign as a
+ * raw message (message-encoding = 0). Pure mode and external mu mode use the message as is,
+ * OpenSSL applies the pure encoding or starts from mu according to the parameters.
+ */
+static int32_t MlDsaPrepareMessage(const struct HksUsageSpec *usageSpec, const struct HksBlob *message,
+    struct HksBlob *encodedMessage)
+{
+    encodedMessage->data = NULL;
+    encodedMessage->size = 0;
+
+    switch (usageSpec->pqcSigMode) {
+        case HKS_PQC_SIG_MODE_PURE:
+            return HKS_SUCCESS;
+        case HKS_PQC_SIG_MODE_EXTERNAL_MU:
+            HKS_IF_TRUE_LOGE_RETURN((message->data == NULL) || (message->size != ML_DSA_MU_SIZE),
+                HKS_ERROR_INVALID_ARGUMENT, "invalid ml-dsa external mu size %" LOG_PUBLIC "u", message->size)
+            return HKS_SUCCESS;
+        case HKS_PQC_SIG_MODE_PREHASH: {
+            struct HksBlob *context = (struct HksBlob *)usageSpec->algParam;
+            HKS_IF_TRUE_LOGE_RETURN((context != NULL) && (context->size > HKS_ML_DSA_MAX_CONTEXT_SIZE),
+                HKS_ERROR_INVALID_ARGUMENT, "invalid ml-dsa context size %" LOG_PUBLIC "u", context->size)
+            const MlDsaPreHashParam *preHashParam = MlDsaGetPreHashParam(usageSpec->digest);
+            HKS_IF_NULL_LOGE_RETURN(preHashParam, HKS_ERROR_INVALID_DIGEST,
+                "unsupported ml-dsa prehash digest %" LOG_PUBLIC "u", usageSpec->digest)
+            return MlDsaBuildPreHashMessage(message, context, preHashParam, encodedMessage);
+        }
+        default:
+            HKS_LOG_E("invalid pqc sig mode %" LOG_PUBLIC "u", usageSpec->pqcSigMode);
+            return HKS_ERROR_INVALID_MODE;
+    }
+}
+
+static int32_t MlDsaSetSignVerifyParam(EVP_PKEY_CTX *ctx, const struct HksUsageSpec *usageSpec)
 {
     struct HksBlob *context = (struct HksBlob *)usageSpec->algParam;
-    HKS_IF_NULL_LOGE_RETURN(context, HKS_ERROR_NULL_POINTER, "context is nullptr")
-    HKS_IF_NULL_LOGI_RETURN(context->data, HKS_SUCCESS, "context data is null")
+    int32_t muFlag = 0;
+    int32_t msgEncoding = ML_DSA_MSG_ENCODE_RAW;
+    OSSL_PARAM params[ML_DSA_KEY_NUM];
+    uint32_t index = 0;
 
-    OSSL_PARAM ctxParams[] = {
-        OSSL_PARAM_construct_octet_string(ML_DSA_CONTEXT, context->data, context->size),
-        OSSL_PARAM_construct_end(),
-    };
-    if (EVP_PKEY_CTX_set_params(ctx, ctxParams) != HKS_OPENSSL_SUCCESS) {
-        HKS_LOG_E("evp ml-dsa set context failed");
+    if (usageSpec->pqcSigMode == HKS_PQC_SIG_MODE_EXTERNAL_MU) {
+        /* mu already contains the context and the message, the context string must not be applied again */
+        muFlag = 1;
+        params[index++] = OSSL_PARAM_construct_int(ML_DSA_MU, &muFlag);
+    } else {
+        if (usageSpec->pqcSigMode == HKS_PQC_SIG_MODE_PREHASH) {
+            params[index++] = OSSL_PARAM_construct_int(ML_DSA_MESSAGE_ENCODING, &msgEncoding);
+        }
+        if ((context != NULL) && (context->data != NULL) && (context->size != 0)) {
+            params[index++] = OSSL_PARAM_construct_octet_string(ML_DSA_CONTEXT_STRING, context->data, context->size);
+        }
+    }
+
+    if (index == 0) {
+        return HKS_SUCCESS;
+    }
+    params[index] = OSSL_PARAM_construct_end();
+
+    if (EVP_PKEY_CTX_set_params(ctx, params) != HKS_OPENSSL_SUCCESS) {
+        HKS_LOG_E("evp ml-dsa set params failed");
         HksLogOpensslError();
         return HKS_ERROR_CRYPTO_ENGINE_ERROR;
     }
@@ -267,8 +405,19 @@ int32_t HksOpensslMlDsaSign(const struct HksBlob *key, const struct HksUsageSpec
     EVP_PKEY *pkey = NULL;
     EVP_MD_CTX *mdCtx = NULL;
     EVP_PKEY_CTX *signCtx = NULL;
+    struct HksBlob encodedMessage = { 0, NULL };
+    const struct HksBlob *messageToSign = message;
     int32_t ret = HKS_SUCCESS;
     do {
+        ret = MlDsaPrepareMessage(usageSpec, message, &encodedMessage);
+        if (ret != HKS_SUCCESS) {
+            HKS_LOG_E("prepare ml-dsa sign message failed, ret = %" LOG_PUBLIC "d", ret);
+            break;
+        }
+        if (encodedMessage.data != NULL) {
+            messageToSign = &encodedMessage;
+        }
+
         ret = MlDsaSignVerifyInitCtx(key, &pkey);
         if (ret != HKS_SUCCESS) {
             HKS_LOG_E("failed to init sign/verify ctx");
@@ -291,11 +440,12 @@ int32_t HksOpensslMlDsaSign(const struct HksBlob *key, const struct HksUsageSpec
             break;
         }
 
-        ret = MlDsaSetContextParam(signCtx, usageSpec);
+        ret = MlDsaSetSignVerifyParam(signCtx, usageSpec);
         HKS_IF_NOT_SUCC_BREAK(ret)
 
         size_t outSize = signature->size;
-        if (EVP_DigestSign(mdCtx, signature->data, &outSize, message->data, message->size) != HKS_OPENSSL_SUCCESS) {
+        if (EVP_DigestSign(mdCtx, signature->data, &outSize, messageToSign->data,
+            messageToSign->size) != HKS_OPENSSL_SUCCESS) {
             HKS_LOG_E("evp ml-dsa signature failed");
             HksLogOpensslError();
             ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
@@ -304,6 +454,7 @@ int32_t HksOpensslMlDsaSign(const struct HksBlob *key, const struct HksUsageSpec
         signature->size = (uint32_t)outSize;
     } while (0);
 
+    HKS_MEMSET_FREE_BLOB(encodedMessage);
     EVP_PKEY_free(pkey);
     EVP_MD_CTX_free(mdCtx);
     return ret;
@@ -315,8 +466,19 @@ int32_t HksOpensslMlDsaVerify(const struct HksBlob *key, const struct HksUsageSp
     EVP_PKEY *pkey = NULL;
     EVP_MD_CTX *mdCtx = NULL;
     EVP_PKEY_CTX *verifyCtx = NULL;
+    struct HksBlob encodedMessage = { 0, NULL };
+    const struct HksBlob *messageToVerify = message;
     int32_t ret = HKS_SUCCESS;
     do {
+        ret = MlDsaPrepareMessage(usageSpec, message, &encodedMessage);
+        if (ret != HKS_SUCCESS) {
+            HKS_LOG_E("prepare ml-dsa verify message failed, ret = %" LOG_PUBLIC "d", ret);
+            break;
+        }
+        if (encodedMessage.data != NULL) {
+            messageToVerify = &encodedMessage;
+        }
+
         ret = MlDsaSignVerifyInitCtx(key, &pkey);
         if (ret != HKS_SUCCESS) {
             HKS_LOG_E("failed to init sign/verify ctx");
@@ -339,17 +501,18 @@ int32_t HksOpensslMlDsaVerify(const struct HksBlob *key, const struct HksUsageSp
             break;
         }
 
-        ret = MlDsaSetContextParam(verifyCtx, usageSpec);
+        ret = MlDsaSetSignVerifyParam(verifyCtx, usageSpec);
         HKS_IF_NOT_SUCC_BREAK(ret)
 
-        if (EVP_DigestVerify(mdCtx, signature->data, signature->size, message->data,
-            message->size) != HKS_OPENSSL_SUCCESS) {
+        if (EVP_DigestVerify(mdCtx, signature->data, signature->size, messageToVerify->data,
+            messageToVerify->size) != HKS_OPENSSL_SUCCESS) {
             HKS_LOG_E("evp ml-dsa verification failed");
             HksLogOpensslError();
             ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
         }
     } while (0);
 
+    HKS_MEMSET_FREE_BLOB(encodedMessage);
     EVP_PKEY_free(pkey);
     EVP_MD_CTX_free(mdCtx);
     return ret;

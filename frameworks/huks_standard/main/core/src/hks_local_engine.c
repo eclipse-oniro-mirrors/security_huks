@@ -337,6 +337,11 @@ int32_t HksLocalSign(const struct HksBlob *key, const struct HksParamSet *paramS
     struct HksUsageSpec usageSpec = {0};
     HksFillUsageSpec(paramSet, &usageSpec);
     SetRsaPssSaltLenType(paramSet, &usageSpec);
+    struct HksBlob context = { 0, NULL };
+    if (usageSpec.algType == HKS_ALG_ML_DSA) {
+        ret = HksFillMlDsaContext(paramSet, &usageSpec, &context);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "local sign fill ml-dsa context failed")
+    }
     bool needFree = true;
     struct HksBlob message = { 0, NULL };
     struct HksBlob keyMaterial = { 0, NULL };
@@ -370,6 +375,11 @@ int32_t HksLocalVerify(const struct HksBlob *key, const struct HksParamSet *para
     struct HksUsageSpec usageSpec = {0};
     HksFillUsageSpec(paramSet, &usageSpec);
     SetRsaPssSaltLenType(paramSet, &usageSpec);
+    struct HksBlob context = { 0, NULL };
+    if (usageSpec.algType == HKS_ALG_ML_DSA) {
+        ret = HksFillMlDsaContext(paramSet, &usageSpec, &context);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "local verify fill ml-dsa context failed")
+    }
     bool needFree = true;
     struct HksBlob message = { 0, NULL };
     struct HksBlob keyMaterial = { 0, NULL };

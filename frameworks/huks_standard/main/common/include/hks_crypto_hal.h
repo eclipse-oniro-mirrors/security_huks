@@ -76,6 +76,8 @@ struct HksUsageSpec {
     uint32_t digest;
     uint32_t purpose;
     uint32_t pssSaltLenType;
+    /* PQC signature mode, see enum HksPqcSigMode; only used when algType is HKS_ALG_ML_DSA */
+    uint32_t pqcSigMode;
     /*
      * Different algorithms correspond to different structures,for example:
      * struct HksAeadParam for aead;

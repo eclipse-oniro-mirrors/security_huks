@@ -44,6 +44,16 @@ int32_t HksAuth(uint32_t authId, const struct HksKeyNode *keyNode, const struct 
 
 int32_t HksThreeStageAuth(uint32_t authId, const struct HuksKeyNode *keyNode);
 
+/*
+ * The PQC signature mode is optional at key generation/import, like the digest/block mode tags:
+ * - if HKS_TAG_PQC_SIG_MODE is stored in the key blob the key is bound to it and the sign/verify
+ *   request must use the same mode;
+ * - if the tag is absent the key is not bound and the request may use any mode (PURE when absent),
+ *   so keys generated before this tag existed remain usable.
+ */
+int32_t HksCheckPqcSigModeMatch(const struct HksParamSet *keyBlobParamSet,
+    const struct HksParamSet *runtimeParamSet);
+
 #ifdef __cplusplus
 }
 #endif

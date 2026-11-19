@@ -155,7 +155,17 @@ static int32_t SignVerifyPreCheck(const struct HksKeyNode *keyNode, const struct
     int32_t ret = HksProcessIdentityVerify(keyNode->paramSet, paramSet);
     HKS_IF_NOT_SUCC_RETURN(ret, ret)
 
-    return SignVerifyAuth(keyNode, paramSet);
+    ret = SignVerifyAuth(keyNode, paramSet);
+    HKS_IF_NOT_SUCC_RETURN(ret, ret)
+
+    struct HksParam *algParam = NULL;
+    ret = HksGetParam(keyNode->paramSet, HKS_TAG_ALGORITHM, &algParam);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get algorithm param failed")
+
+    if (algParam->uint32Param == HKS_ALG_ML_DSA) {
+        return HksCheckPqcSigModeMatch(keyNode->paramSet, paramSet);
+    }
+    return HKS_SUCCESS;
 }
 
 static int32_t SignVerify(uint32_t cmdId, const struct HksBlob *key, const struct HksParamSet *paramSet,
@@ -184,6 +194,16 @@ static int32_t SignVerify(uint32_t cmdId, const struct HksBlob *key, const struc
         struct HksUsageSpec usageSpec = {0};
         HksFillUsageSpec(paramSet, &usageSpec);
         SetRsaPssSaltLenType(paramSet, &usageSpec);
+        struct HksBlob context = { 0, NULL };
+        if (usageSpec.algType == HKS_ALG_ML_DSA) {
+            ret = HksFillMlDsaContext(paramSet, &usageSpec, &context);
+            if (ret != HKS_SUCCESS) {
+                HKS_LOG_E("fill ml-dsa context fail, ret = %" LOG_PUBLIC "d", ret);
+                (void)memset_s(rawKey.data, rawKey.size, 0, rawKey.size);
+                HKS_FREE(rawKey.data);
+                break;
+            }
+        }
         HKS_LOG_I("Sign or verify.");
         if (cmdId == HKS_CMD_ID_SIGN) {
             ret = HksCryptoHalSign(&rawKey, &usageSpec, &message, signature);

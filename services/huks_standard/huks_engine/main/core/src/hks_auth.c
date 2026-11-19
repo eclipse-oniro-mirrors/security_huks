@@ -182,6 +182,47 @@ static int32_t AuthPolicy(const struct HksAuthPolicy *policy, const struct HksPa
     return HKS_SUCCESS;
 }
 
+static int32_t GetPqcSigMode(const struct HksParamSet *paramSet, uint32_t *mode)
+{
+    *mode = HKS_PQC_SIG_MODE_PURE;
+    struct HksParam *param = NULL;
+    int32_t ret = HksGetParam(paramSet, HKS_TAG_PQC_SIG_MODE, &param);
+    if (ret == HKS_SUCCESS) {
+        *mode = param->uint32Param;
+        return HKS_SUCCESS;
+    }
+    return (ret == HKS_ERROR_PARAM_NOT_EXIST) ? HKS_SUCCESS : HKS_ERROR_INVALID_ARGUMENT;
+}
+
+int32_t HksCheckPqcSigModeMatch(const struct HksParamSet *keyBlobParamSet,
+    const struct HksParamSet *runtimeParamSet)
+{
+    HKS_IF_NULL_LOGE_RETURN(keyBlobParamSet, HKS_ERROR_NULL_POINTER, "keyBlobParamSet is null")
+    HKS_IF_NULL_LOGE_RETURN(runtimeParamSet, HKS_ERROR_NULL_POINTER, "runtimeParamSet is null")
+
+    /*
+     * The mode is optional at key generation/import, like the digest or block mode tags:
+     * - present in the key blob: the key is bound to this mode, the request must use the same one;
+     * - absent: the key is not bound, the request decides the mode (PURE when the tag is absent).
+     * Keys generated before HKS_TAG_PQC_SIG_MODE existed therefore stay usable for every mode.
+     */
+    struct HksParam *keyModeParam = NULL;
+    int32_t ret = HksGetParam(keyBlobParamSet, HKS_TAG_PQC_SIG_MODE, &keyModeParam);
+    if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+        return HKS_SUCCESS;
+    }
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get key pqc sig mode failed")
+
+    uint32_t requestMode = HKS_PQC_SIG_MODE_PURE;
+    ret = GetPqcSigMode(runtimeParamSet, &requestMode);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get request pqc sig mode failed")
+
+    HKS_IF_TRUE_LOGE_RETURN(keyModeParam->uint32Param != requestMode, HKS_ERROR_INVALID_MODE,
+        "pqc sig mode mismatch, key mode %" LOG_PUBLIC "u, request mode %" LOG_PUBLIC "u",
+        keyModeParam->uint32Param, requestMode)
+    return HKS_SUCCESS;
+}
+
 int32_t HksAuth(uint32_t authId, const struct HksKeyNode *keyNode, const struct HksParamSet *paramSet)
 {
     bool isSupportUserAuth = false;
