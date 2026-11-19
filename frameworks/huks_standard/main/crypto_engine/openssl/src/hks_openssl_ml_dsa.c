@@ -399,6 +399,47 @@ static int32_t MlDsaSignVerifyInitCtx(const struct HksBlob *key, EVP_PKEY **pkey
     return HKS_SUCCESS;
 }
 
+static int32_t MlDsaPrepareMessageToUse(const struct HksUsageSpec *usageSpec, const struct HksBlob *message,
+    struct HksBlob *encodedMessage, const struct HksBlob **messageToUse)
+{
+    *messageToUse = message;
+    int32_t ret = MlDsaPrepareMessage(usageSpec, message, encodedMessage);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "prepare ml-dsa message failed, ret = %" LOG_PUBLIC "d", ret)
+    if (encodedMessage->data != NULL) {
+        *messageToUse = encodedMessage;
+    }
+    return HKS_SUCCESS;
+}
+
+static int32_t MlDsaInitSignVerifyOpCtx(const struct HksBlob *key, bool isSign,
+    EVP_PKEY **pkey, EVP_MD_CTX **mdCtx, EVP_PKEY_CTX **opCtx)
+{
+    int32_t ret = MlDsaSignVerifyInitCtx(key, pkey);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "failed to init ml-dsa key ctx");
+
+    *mdCtx = EVP_MD_CTX_new();
+    HKS_IF_NULL_LOGE_RETURN(*mdCtx, HKS_ERROR_CRYPTO_ENGINE_ERROR, "failed to create ml-dsa md ctx");
+
+    int32_t initRet = isSign ? EVP_DigestSignInit(*mdCtx, opCtx, NULL, NULL, *pkey) :
+        EVP_DigestVerifyInit(*mdCtx, opCtx, NULL, NULL, *pkey);
+    if (initRet != HKS_OPENSSL_SUCCESS) {
+        HksLogOpensslError();
+        return HKS_ERROR_CRYPTO_ENGINE_ERROR;
+    }
+    return HKS_SUCCESS;
+}
+
+static int32_t MlDsaDoSign(EVP_MD_CTX *mdCtx, const struct HksBlob *message, struct HksBlob *signature)
+{
+    size_t outSize = signature->size;
+    if (EVP_DigestSign(mdCtx, signature->data, &outSize, message->data, message->size) != HKS_OPENSSL_SUCCESS) {
+        HksLogOpensslError();
+        return HKS_ERROR_CRYPTO_ENGINE_ERROR;
+    }
+    signature->size = (uint32_t)outSize;
+    return HKS_SUCCESS;
+}
+
 int32_t HksOpensslMlDsaSign(const struct HksBlob *key, const struct HksUsageSpec *usageSpec,
     const struct HksBlob *message, struct HksBlob *signature)
 {
@@ -406,58 +447,34 @@ int32_t HksOpensslMlDsaSign(const struct HksBlob *key, const struct HksUsageSpec
     EVP_MD_CTX *mdCtx = NULL;
     EVP_PKEY_CTX *signCtx = NULL;
     struct HksBlob encodedMessage = { 0, NULL };
-    const struct HksBlob *messageToSign = message;
-    int32_t ret = HKS_SUCCESS;
-    do {
-        ret = MlDsaPrepareMessage(usageSpec, message, &encodedMessage);
-        if (ret != HKS_SUCCESS) {
-            HKS_LOG_E("prepare ml-dsa sign message failed, ret = %" LOG_PUBLIC "d", ret);
-            break;
-        }
-        if (encodedMessage.data != NULL) {
-            messageToSign = &encodedMessage;
-        }
+    const struct HksBlob *messageToSign = NULL;
 
-        ret = MlDsaSignVerifyInitCtx(key, &pkey);
-        if (ret != HKS_SUCCESS) {
-            HKS_LOG_E("failed to init sign/verify ctx");
-            HksLogOpensslError();
-            break;
-        }
-
-        mdCtx = EVP_MD_CTX_new();
-        if (mdCtx == NULL) {
-            HKS_LOG_E("failed to create ml-dsa md ctx");
-            HksLogOpensslError();
-            ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
-            break;
-        }
-
-        if (EVP_DigestSignInit(mdCtx, &signCtx, NULL, NULL, pkey) != HKS_OPENSSL_SUCCESS) {
-            HKS_LOG_E("evp ml-dsa signature init failed");
-            HksLogOpensslError();
-            ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
-            break;
-        }
-
+    int32_t ret = MlDsaPrepareMessageToUse(usageSpec, message, &encodedMessage, &messageToSign);
+    if (ret == HKS_SUCCESS) {
+        ret = MlDsaInitSignVerifyOpCtx(key, true, &pkey, &mdCtx, &signCtx);
+    }
+    if (ret == HKS_SUCCESS) {
         ret = MlDsaSetSignVerifyParam(signCtx, usageSpec);
-        HKS_IF_NOT_SUCC_BREAK(ret)
-
-        size_t outSize = signature->size;
-        if (EVP_DigestSign(mdCtx, signature->data, &outSize, messageToSign->data,
-            messageToSign->size) != HKS_OPENSSL_SUCCESS) {
-            HKS_LOG_E("evp ml-dsa signature failed");
-            HksLogOpensslError();
-            ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
-            break;
-        }
-        signature->size = (uint32_t)outSize;
-    } while (0);
+    }
+    if (ret == HKS_SUCCESS) {
+        ret = MlDsaDoSign(mdCtx, messageToSign, signature);
+    }
 
     HKS_MEMSET_FREE_BLOB(encodedMessage);
     EVP_PKEY_free(pkey);
     EVP_MD_CTX_free(mdCtx);
     return ret;
+}
+
+static int32_t MlDsaDoVerify(EVP_MD_CTX *mdCtx, const struct HksBlob *message,
+    const struct HksBlob *signature)
+{
+    if (EVP_DigestVerify(mdCtx, signature->data, signature->size, message->data, message->size) !=
+        HKS_OPENSSL_SUCCESS) {
+        HksLogOpensslError();
+        return HKS_ERROR_CRYPTO_ENGINE_ERROR;
+    }
+    return HKS_SUCCESS;
 }
 
 int32_t HksOpensslMlDsaVerify(const struct HksBlob *key, const struct HksUsageSpec *usageSpec,
@@ -467,50 +484,18 @@ int32_t HksOpensslMlDsaVerify(const struct HksBlob *key, const struct HksUsageSp
     EVP_MD_CTX *mdCtx = NULL;
     EVP_PKEY_CTX *verifyCtx = NULL;
     struct HksBlob encodedMessage = { 0, NULL };
-    const struct HksBlob *messageToVerify = message;
-    int32_t ret = HKS_SUCCESS;
-    do {
-        ret = MlDsaPrepareMessage(usageSpec, message, &encodedMessage);
-        if (ret != HKS_SUCCESS) {
-            HKS_LOG_E("prepare ml-dsa verify message failed, ret = %" LOG_PUBLIC "d", ret);
-            break;
-        }
-        if (encodedMessage.data != NULL) {
-            messageToVerify = &encodedMessage;
-        }
+    const struct HksBlob *messageToVerify = NULL;
 
-        ret = MlDsaSignVerifyInitCtx(key, &pkey);
-        if (ret != HKS_SUCCESS) {
-            HKS_LOG_E("failed to init sign/verify ctx");
-            HksLogOpensslError();
-            break;
-        }
-
-        mdCtx = EVP_MD_CTX_new();
-        if (mdCtx == NULL) {
-            HKS_LOG_E("failed to create ml-dsa md ctx");
-            HksLogOpensslError();
-            ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
-            break;
-        }
-
-        if (EVP_DigestVerifyInit(mdCtx, &verifyCtx, NULL, NULL, pkey) != HKS_OPENSSL_SUCCESS) {
-            HKS_LOG_E("evp ml-dsa verification init failed");
-            HksLogOpensslError();
-            ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
-            break;
-        }
-
+    int32_t ret = MlDsaPrepareMessageToUse(usageSpec, message, &encodedMessage, &messageToVerify);
+    if (ret == HKS_SUCCESS) {
+        ret = MlDsaInitSignVerifyOpCtx(key, false, &pkey, &mdCtx, &verifyCtx);
+    }
+    if (ret == HKS_SUCCESS) {
         ret = MlDsaSetSignVerifyParam(verifyCtx, usageSpec);
-        HKS_IF_NOT_SUCC_BREAK(ret)
-
-        if (EVP_DigestVerify(mdCtx, signature->data, signature->size, messageToVerify->data,
-            messageToVerify->size) != HKS_OPENSSL_SUCCESS) {
-            HKS_LOG_E("evp ml-dsa verification failed");
-            HksLogOpensslError();
-            ret = HKS_ERROR_CRYPTO_ENGINE_ERROR;
-        }
-    } while (0);
+    }
+    if (ret == HKS_SUCCESS) {
+        ret = MlDsaDoVerify(mdCtx, messageToVerify, signature);
+    }
 
     HKS_MEMSET_FREE_BLOB(encodedMessage);
     EVP_PKEY_free(pkey);
