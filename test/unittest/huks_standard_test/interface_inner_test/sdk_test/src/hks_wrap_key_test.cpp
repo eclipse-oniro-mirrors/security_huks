@@ -264,11 +264,19 @@ HWTEST_F(HksWrapKeyTest, HksWrapKeyTest001, TestSize.Level0)
 
         /* wrap the key */
         ohResult = OH_Huks_WrapKey(&keyAlias, wrapParamSet, &wrappedKey);
+#ifdef HKS_ROSEN_EMULATOR
+        EXPECT_EQ(ohResult.errorCode, HUKS_ERR_CODE_EMULATOR_NOT_SUPPORT) << "OH_Huks_WrapKey fail";
+#else
         EXPECT_EQ(ohResult.errorCode, OH_HUKS_ERR_CODE_NOT_SUPPORTED_API) << "OH_Huks_WrapKey fail";
+#endif
 
         /* unwrap the key */
         ohResult = OH_Huks_UnwrapKey(&keyAlias, wrapParamSet, &wrappedKey);
+#ifdef HKS_ROSEN_EMULATOR
+        EXPECT_EQ(ohResult.errorCode, HUKS_ERR_CODE_EMULATOR_NOT_SUPPORT) << "OH_Huks_UnwrapKey fail";
+#else
         EXPECT_EQ(ohResult.errorCode, OH_HUKS_ERR_CODE_NOT_SUPPORTED_API) << "OH_Huks_UnwrapKey fail";
+#endif
     } while (0);
 
     OH_Huks_FreeParamSet(&genParamSet);
