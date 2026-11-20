@@ -124,8 +124,8 @@ int32_t HksProviderLifeCycleManager::OnRegisterProvider(const HksProcessInfo &pr
     }
     if (!inserted) {
         HKS_LOG_E("OnRegisterProvider failed, provider registered by another thread concurrently.");
-        if (connectInfo != nullptr) {
-            connectInfo->OnDisconnect(connectInfo);
+        if (connection != nullptr) {
+            connection->OnDisconnect(connection);
         }
         return HKS_ERROR_PROVIDER_HAS_REGISTERED;
     }

@@ -141,7 +141,7 @@ int32_t HksSessionManager::ExtensionInitSession(struct HksProcessWithErrorInfo &
         (void)proxy->FinishSession(sessionHandle, newParamSet, tmpVec, tmpVec, rollbackErrorInfo);
     };
     lock.lock();
-    if (!CheckSingleCallerCanInitSession(*processAndError.processInfo) || m_handlers.size() >= MAX_HANDLE_SIZE) {
+    if (!CheckSingleCallerCanInitSession(*processAndError.processInfo) || m_handlers.Size() >= MAX_HANDLE_SIZE) {
         lock.unlock();
         rollbackRemoteSession();
         return HKS_ERROR_SESSION_REACHED_LIMIT;
