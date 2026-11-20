@@ -96,6 +96,37 @@ int32_t HksSessionManager::CheckParmSetPurposeAndCheckAuth(const HksProcessInfo 
 }
 
 constexpr int32_t MAX_HANDLE_SIZE = 96;
+int32_t HksSessionManager::CommitSessionHandle(const HksProcessInfo &processInfo, const ProviderInfo &providerInfo,
+    const OHOS::sptr<IHuksAccessExtBase> &proxy, const std::string &sessionHandle,
+    const CppParamSet &newParamSet, const std::string &index, uint32_t &handle)
+{
+    auto rollbackRemoteSession = [&proxy, &sessionHandle, &newParamSet]() {
+        std::vector<uint8_t> tmpVec;
+        HksExternalErrorInfoIdl rollbackErrorInfo = {HKS_ERROR_EXT_JS_METHOD_ERROR, HKS_DEFAULT_ERROR_DESC, false};
+        (void)proxy->FinishSession(sessionHandle, newParamSet, tmpVec, tmpVec, rollbackErrorInfo);
+    };
+    std::unique_lock<std::mutex> lock(m_sessionMutex);
+    if (!CheckSingleCallerCanInitSession(processInfo) || m_handlers.Size() >= MAX_HANDLE_SIZE) {
+        lock.unlock();
+        rollbackRemoteSession();
+        return HKS_ERROR_SESSION_REACHED_LIMIT;
+    }
+    auto random = GenRandomUint32();
+    if (random.first != HKS_SUCCESS) {
+        lock.unlock();
+        rollbackRemoteSession();
+        return random.first;
+    }
+    HandleInfo handleInfo{sessionHandle, providerInfo, processInfo.uidInt, index};
+    if (!m_handlers.Insert(random.second, handleInfo)) {
+        lock.unlock();
+        rollbackRemoteSession();
+        return HKS_ERROR_CODE_KEY_ALREADY_EXIST;
+    }
+    handle = random.second;
+    return HKS_SUCCESS;
+}
+
 int32_t HksSessionManager::ExtensionInitSession(struct HksProcessWithErrorInfo &processAndError,
     const std::string &index, const CppParamSet &paramSet, uint32_t &handle)
 {
@@ -128,38 +159,13 @@ int32_t HksSessionManager::ExtensionInitSession(struct HksProcessWithErrorInfo &
 
     HksExternalErrorInfoIdl errorInfo = {HKS_ERROR_EXT_JS_METHOD_ERROR, "", false};
     auto ipcCode = proxy->InitSession(sIndexHandle, newParamSet, sessionHandle, errorInfo);
-    HKS_IF_TRUE_LOGE_RETURN(ipcCode != EOK, HKS_ERROR_IPC_MSG_FAIL, "proxy InitSession ipcCode: %" LOG_PUBLIC "d",
-        ipcCode)
+    HKS_IF_TRUE_LOGE_RETURN(ipcCode != EOK, HKS_ERROR_IPC_MSG_FAIL, "InitSession ipcCode: %" LOG_PUBLIC "d", ipcCode);
     ret = ConvertExtensionToHksErrorCode(errorInfo.errVal, g_initSessionErrCodeMapping);
     HksExtRecordErrInfo(errorInfo, &processAndError.errInfo);
-    
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "proxy InitSession get handle failed: %" LOG_PUBLIC "d", ret)
-    // The remote session had been created; close it if the local insertion cannot be committed.
-    auto rollbackRemoteSession = [&proxy, &sessionHandle, &newParamSet]() {
-        std::vector<uint8_t> tmpVec;
-        HksExternalErrorInfoIdl rollbackErrorInfo = {HKS_ERROR_EXT_JS_METHOD_ERROR, HKS_DEFAULT_ERROR_DESC, false};
-        (void)proxy->FinishSession(sessionHandle, newParamSet, tmpVec, tmpVec, rollbackErrorInfo);
-    };
-    lock.lock();
-    if (!CheckSingleCallerCanInitSession(*processAndError.processInfo) || m_handlers.Size() >= MAX_HANDLE_SIZE) {
-        lock.unlock();
-        rollbackRemoteSession();
-        return HKS_ERROR_SESSION_REACHED_LIMIT;
-    }
-    auto random = GenRandomUint32();
-    if (random.first != HKS_SUCCESS) {
-        lock.unlock();
-        rollbackRemoteSession();
-        return random.first;
-    }
-    HandleInfo handleInfo{sessionHandle, providerInfo, uid, index};
-    if (!m_handlers.Insert(random.second, handleInfo)) {
-        lock.unlock();
-        rollbackRemoteSession();
-        return HKS_ERROR_CODE_KEY_ALREADY_EXIST;
-    }
-    handle = random.second;
-    return HKS_SUCCESS;
+
+    return CommitSessionHandle(*processAndError.processInfo, providerInfo, proxy, sessionHandle,
+        newParamSet, index, handle);
 }
 
 int32_t HksSessionManager::ExtensionUpdateSession(struct HksProcessWithErrorInfo &processAndError,

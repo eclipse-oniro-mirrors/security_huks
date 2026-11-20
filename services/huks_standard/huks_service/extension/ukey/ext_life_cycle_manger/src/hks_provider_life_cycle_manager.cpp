@@ -75,46 +75,34 @@ void HksProviderLifeCycleManager::PrintRegisterProviders()
 int32_t HksProviderLifeCycleManager::OnRegisterProvider(const HksProcessInfo &processInfo,
     const std::string &providerName, const CppParamSet &paramSet, std::function<void(HksProcessInfo)> callback)
 {
-    HKS_LOG_I("OnRegisterProvider providerName: %" LOG_PUBLIC "s", providerName.c_str());
-    HKS_IF_TRUE_RETURN(!CheckStringParamLenIsOk(providerName, 1, MAX_PROVIDER_NAME_LEN), HKS_ERROR_INVALID_ARGUMENT)
+    HKS_IF_TRUE_RETURN(!CheckStringParamLenIsOk(providerName, 1, MAX_PROVIDER_NAME_LEN), HKS_ERROR_INVALID_ARGUMENT);
     HKS_IF_TRUE_LOGE_RETURN(m_providerMap.Size() >= HKS_MAX_PROVIDER_NUM,
-        HKS_ERROR_UKY_PROVIDER_MGR_REGESTER_REACH_MAX_NUM, "OnRegisterProvider failed, providerNum is too much.")
+        HKS_ERROR_UKY_PROVIDER_MGR_REGESTER_REACH_MAX_NUM, "OnRegisterProvider failed, providerNum is too much.");
     ProviderInfo providerInfo{};
     int32_t ret = HksGetProviderInfo(processInfo, providerName, paramSet, providerInfo);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret,
-        "Fail to get provider info. providerName: %" LOG_PUBLIC "s. ret: %" LOG_PUBLIC "d", providerName.c_str(), ret)
-    HKS_LOG_I("bundleName: %" LOG_PUBLIC "s, (abilityName: %" LOG_PUBLIC "s",
-        providerInfo.m_bundleName.c_str(), providerInfo.m_abilityName.c_str());
-
+    HKS_IF_TRUE_RETURN(ret != HKS_SUCCESS, ret);
+    HKS_LOG_I("providerName: %" LOG_PUBLIC "s, bundleName: %" LOG_PUBLIC "s, abilityName: %" LOG_PUBLIC "s",
+        providerName.c_str(), providerInfo.m_bundleName.c_str(), providerInfo.m_abilityName.c_str());
     {
         std::lock_guard<std::mutex> lock(m_registerMutex);
         this->PrintRegisterProviders();
-
-        // Re-check under the lock: concurrent registrations may have filled the quota after the
-        // early check at function entry.
         HKS_IF_TRUE_LOGE_RETURN(m_providerMap.Size() >= HKS_MAX_PROVIDER_NUM,
-        HKS_ERROR_UKY_PROVIDER_MGR_REGESTER_REACH_MAX_NUM, "OnRegisterProvider failed, providerNum is too much.")
+            HKS_ERROR_UKY_PROVIDER_MGR_REGESTER_REACH_MAX_NUM, "OnRegisterProvider failed, providerNum is too much.")
         std::shared_ptr<HksExtAbilityConnectInfo> existingInfo{nullptr};
-        HKS_IF_TRUE_LOGE_RETURN(m_providerMap.Find(providerInfo, existingInfo),
-            HKS_ERROR_PROVIDER_HAS_REGISTERED, "OnRegisterProvider failed, providerName: %" LOG_PUBLIC "s,"
-            "bundleName: %" LOG_PUBLIC "s, abilityName: %" LOG_PUBLIC "s, already exist",
-            providerInfo.m_providerName.c_str(),
-            providerInfo.m_bundleName.c_str(), providerInfo.m_abilityName.c_str())
+        HKS_IF_TRUE_LOGE_RETURN(m_providerMap.Find(providerInfo, existingInfo), HKS_ERROR_PROVIDER_HAS_REGISTERED,
+            "providerName: %" LOG_PUBLIC "s, already exist", providerInfo.m_providerName.c_str());
     }
     auto connection = sptr<ExtensionConnection>(new (std::nothrow) ExtensionConnection(processInfo));
-    HKS_IF_TRUE_LOGE_RETURN(connection == nullptr, HKS_ERROR_NULL_POINTER, "Failed to create ExtensionConnection")
+    HKS_IF_TRUE_LOGE_RETURN(connection == nullptr, HKS_ERROR_NULL_POINTER, "Failed to create ExtensionConnection");
     connection->callBackFromPlugin(callback);
     AAFwk::Want want{};
     want.SetElementName(providerInfo.m_bundleName, providerInfo.m_abilityName);
     ret = connection->OnConnection(want, connection, processInfo.userIdInt);
-    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "AMSConnectAbility failed")
-
+    HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "AMSConnectAbility failed");
     sptr<IRemoteObject> remoteObject = connection->GetRemoteObject();
-    HKS_IF_TRUE_LOGE_RETURN(remoteObject == nullptr, HKS_ERROR_NULL_POINTER,
-        "remoteObject is nullptr after connect")
-
+    HKS_IF_TRUE_LOGE_RETURN(remoteObject == nullptr, HKS_ERROR_NULL_POINTER, "remoteObject is nullptr after connect");
     auto proxy = iface_cast<IHuksAccessExtBase>(remoteObject);
-    HKS_IF_TRUE_LOGE_RETURN(proxy == nullptr, HKS_ERROR_NULL_POINTER, "iface_cast to IHuksAccessExtBase failed")
+    HKS_IF_TRUE_LOGE_RETURN(proxy == nullptr, HKS_ERROR_NULL_POINTER, "iface_cast to IHuksAccessExtBase failed");
 
     auto connectInfo = std::make_shared<HksExtAbilityConnectInfo>(want, proxy, connection);
     bool inserted = false;
@@ -124,19 +112,14 @@ int32_t HksProviderLifeCycleManager::OnRegisterProvider(const HksProcessInfo &pr
     }
     if (!inserted) {
         HKS_LOG_E("OnRegisterProvider failed, provider registered by another thread concurrently.");
-        if (connection != nullptr) {
-            connection->OnDisconnect(connection);
-        }
+        HKS_IF_TRUE_EXCU(connection != nullptr, connection->OnDisconnect(connection));
         return HKS_ERROR_PROVIDER_HAS_REGISTERED;
     }
-    HKS_LOG_I("OnRegisterProvider Success! providerName: %" LOG_PUBLIC "s", providerName.c_str());
-    // Register UI ability indices if HKS_EXT_CRYPTO_TAG_ABILITY_INFO is present
     auto abilityInfoTag = paramSet.GetParam<HKS_EXT_CRYPTO_TAG_ABILITY_INFO>();
     HKS_IF_TRUE_LOGI_RETURN(abilityInfoTag.first != HKS_SUCCESS, HKS_SUCCESS, "there is no UiAbility")
 
     std::string jsonStr = std::string(abilityInfoTag.second.begin(), abilityInfoTag.second.end());
-    ret = RegisterUiAbility(processInfo, providerName, paramSet, jsonStr);
-    return ret;
+    return RegisterUiAbility(processInfo, providerName, paramSet, jsonStr);
 }
 
 int32_t HksProviderLifeCycleManager::OnQueryAbility(const HksProcessInfo &processInfo, std::string &resourceId,
@@ -284,7 +267,8 @@ int32_t HksProviderLifeCycleManager::OnUnRegisterProvider(const HksProcessInfo &
         this->PrintRegisterProviders();
         int32_t ret = HksHapGetConnectInfos(processInfo, providerName, paramSet, connectionInfos);
         HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret,
-            "Fail to get provider infos. providerName: %" LOG_PUBLIC "s. ret: %" LOG_PUBLIC "d", providerName.c_str(), ret)
+            "Fail to get provider infos. providerName: %" LOG_PUBLIC "s. ret: %" LOG_PUBLIC "d",
+            providerName.c_str(), ret)
         HKS_IF_TRUE_LOGE_RETURN(connectionInfos.empty(), HKS_ERROR_PROVIDER_NOT_FOUND,
             "OnUnRegisterProvider failed, unfound provider connections. providerName: %" LOG_PUBLIC "s",
                 providerName.c_str())
