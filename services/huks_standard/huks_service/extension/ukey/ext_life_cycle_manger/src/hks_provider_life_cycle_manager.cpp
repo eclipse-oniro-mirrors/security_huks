@@ -178,6 +178,7 @@ int32_t HksProviderLifeCycleManager::GetExtensionProxy(const ProviderInfo &provi
     return HKS_SUCCESS;
 }
 
+// Caller must hold m_registerMutex (called via HksHapGetConnectInfos from OnUnRegisterProvider).
 int32_t HksProviderLifeCycleManager::HapGetAllConnectInfoByProviderName(const std::string &bundleName,
     const std::string &providerName, const int32_t userid,
     std::vector<std::pair<ProviderInfo, std::shared_ptr<HksExtAbilityConnectInfo>>> &providerInfos)
@@ -198,6 +199,7 @@ int32_t HksProviderLifeCycleManager::GetAllProviderInfosByProviderName(const std
     int32_t ret = HksGetFrontUserId(frontUserId);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get front user id failed")
     ret = HKS_ERROR_INVALID_ARGUMENT;
+    std::lock_guard<std::mutex> lock(m_registerMutex);
     m_providerMap.Iterate([&](const ProviderInfo &providerInfo,
         std::shared_ptr<HksExtAbilityConnectInfo> &connectionInfo) {
         if (providerInfo.m_userid == frontUserId) {
@@ -215,6 +217,7 @@ int32_t HksProviderLifeCycleManager::GetAllProviderInfosByProviderName(const std
     return ret;
 }
 
+// Caller must hold m_registerMutex (called from OnUnRegisterProvider).
 int32_t HksProviderLifeCycleManager::HksHapGetConnectInfos(const HksProcessInfo &processInfo,
     const std::string &providerName, const CppParamSet &paramSet,
     std::vector<std::pair<ProviderInfo, std::shared_ptr<HksExtAbilityConnectInfo>>> &connectionInfos)
