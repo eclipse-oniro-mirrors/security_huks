@@ -43,8 +43,7 @@ int32_t GetStringValue(napi_env env, napi_value value, std::string &result)
     auto status = napi_get_value_string_utf8(env, value, nullptr, 0, &tempSize);
     HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok,
         HKS_ERROR_EXT_GET_VALUE_FAILED, "get_length_string_utf8 failed, status:%d", status);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(tempSize > MAX_CERT_SIZE,
-        HKS_ERROR_EXT_EXCEED_MAX_SIZE, "exceed the max size");
+    HKS_EXT_IF_TRUE_LOGE_RETURN(tempSize > MAX_CERT_SIZE, HKS_ERROR_EXT_EXCEED_MAX_SIZE, "exceed the max size");
     result.reserve(tempSize + 1);
     result.resize(tempSize + 1);
     status = napi_get_value_string_utf8(env, value, result.data(), tempSize + 1, &tempSize);
@@ -192,20 +191,19 @@ int32_t GetOptionalInt32Prop(const napi_env &env, const napi_value &obj, const c
 {
     napi_value napiVal = nullptr;
     auto status = napi_get_named_property(env, obj, propName, &napiVal);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS,
         "napi_get_named_property %s failed, status:%d", propName, status);
 
     napi_valuetype valueType = napi_undefined;
     status = napi_typeof(env, napiVal, &valueType);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok || valueType == napi_undefined, HKS_SUCCESS,
-        "napi_typeof %s failed or undefined, status:%d", propName, status);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok || valueType == napi_undefined,
+        HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED, "napi_typeof %s failed or undefined, status:%d", propName, status);
 
     HKS_EXT_IF_TRUE_LOGE_RETURN(valueType != napi_number, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
         "%s is not a number, type:%d", propName, valueType);
 
     status = napi_get_value_int32(env, napiVal, &out);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_VALUE_FAILED,
-        "Convert js %s failed, status:%d", propName, status);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS, "Convert js %s failed, status:%d", propName, status);
     return HKS_SUCCESS;
 }
 
@@ -215,7 +213,7 @@ int32_t GetOptionalStringProp(const napi_env &env, const napi_value &obj, const 
 {
     napi_value napiVal = nullptr;
     auto status = napi_get_named_property(env, obj, propName, &napiVal);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS,
         "napi_get_named_property %s failed, status:%d", propName, status);
 
     napi_valuetype valueType = napi_undefined;
@@ -227,8 +225,7 @@ int32_t GetOptionalStringProp(const napi_env &env, const napi_value &obj, const 
         "%s is not a string, type:%d", propName, valueType);
 
     auto result = GetStringValue(env, napiVal, out);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(result != HKS_SUCCESS, result,
-        "Convert js %s fail, result:%d", propName, result);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(result != HKS_SUCCESS, HKS_SUCCESS, "Convert js %s fail, result:%d", propName, result);
     return HKS_SUCCESS;
 }
 
@@ -238,24 +235,21 @@ int32_t GetOptionalUint32Prop(const napi_env &env, const napi_value &obj, const 
 {
     napi_value napiVal = nullptr;
     auto status = napi_get_named_property(env, obj, propName, &napiVal);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS,
         "napi_get_named_property %s failed, status:%d", propName, status);
 
     napi_valuetype valueType = napi_undefined;
     status = napi_typeof(env, napiVal, &valueType);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok || valueType == napi_undefined, HKS_SUCCESS,
-        "napi_typeof %s failed or undefined, status:%d", propName, status);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok || valueType == napi_undefined,
+        HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED, "napi_typeof %s failed or undefined, status:%d", propName, status);
 
     HKS_EXT_IF_TRUE_LOGE_RETURN(valueType != napi_number, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
         "%s is not a number, type:%d", propName, valueType);
 
     int32_t intVal = 0;
-    status = napi_get_value_int32(env, napiVal, &intVal);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_VALUE_FAILED,
+    status = napi_get_value_uint32(env, napiVal, &out);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS,
         "Convert js %s failed, status:%d", propName, status);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(intVal < 0, HKS_ERROR_EXT_GET_VALUE_FAILED,
-        "%s is negative, value:%d", propName, intVal);
-    out = static_cast<uint32_t>(intVal);
     return HKS_SUCCESS;
 }
 
@@ -264,16 +258,15 @@ int32_t GetOutDataProp(const napi_env &env, const napi_value &obj, std::vector<u
 {
     napi_value napiOutData = nullptr;
     auto status = napi_get_named_property(env, obj, "outData", &napiOutData);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS,
         "napi_get_named_property outData failed, status:%d", status);
 
     napi_valuetype valueType = napi_undefined;
     status = napi_typeof(env, napiOutData, &valueType);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS, "napi_typeof outData failed, status:%d", status);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
+        "napi_typeof outData failed, status:%d", status);
 
-    if (valueType == napi_undefined) {
-        return HKS_SUCCESS;
-    }
+    HKS_EXT_IF_TRUE_RETURN(valueType == napi_undefined, HKS_SUCCESS);
 
     bool isTypedArray = false;
     status = napi_is_typedarray(env, napiOutData, &isTypedArray);
@@ -286,16 +279,13 @@ int32_t GetOutDataProp(const napi_env &env, const napi_value &obj, std::vector<u
     size_t length;
     void *data = nullptr;
     status = napi_get_typedarray_info(env, napiOutData, &type, &length, &data, &nativeArray, &byte_offset);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_VALUE_FAILED,
-        "napi_get_typedarray_info failed, status:%d", status);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_SUCCESS, "napi_get_typedarray_info failed, status:%d", status);
 
     HKS_EXT_IF_TRUE_LOGE_RETURN(type != napi_uint8_array, HKS_ERROR_EXT_GET_VALUE_FAILED,
         "outData is not uint8 array, type:%d", type);
 
-    if (length == 0 || data == nullptr) {
-        return HKS_SUCCESS;
-    }
-
+    HKS_EXT_IF_TRUE_RETURN(length == 0 || data == nullptr, HKS_SUCCESS);
+    
     outData.resize(length);
     HKS_EXT_IF_TRUE_LOGE_RETURN(memcpy_s(outData.data(), length, data, length) != EOK,
         HKS_ERROR_EXT_GET_VALUE_FAILED, "memcpy_s outData failed");
@@ -354,20 +344,21 @@ void GetErrorInfoParams(const napi_env &env, const napi_value &funcResult, Crypt
 
 int32_t GetOpenRemoteHandleParams(const napi_env &env, const napi_value &funcResult, CryptoResultParam &resultParams)
 {
+    HKS_EXT_IF_TRUE_RETURN(resultParams.errCode != 0, HKS_SUCCESS);
     return GetOptionalStringProp(env, funcResult, "handle", resultParams.handle);
 }
 
 int32_t GetResourceIdParams(const napi_env &env, const napi_value &funcResult, CryptoResultParam &resultParams)
 {
+    HKS_EXT_IF_TRUE_RETURN(resultParams.errCode != 0, HKS_SUCCESS);
     return GetOptionalStringProp(env, funcResult, "resourceId", resultParams.handle);
 }
 
 int32_t GetAuthUkeyPinParams(const napi_env &env, const napi_value &funcResult, CryptoResultParam &resultParams)
 {
-    int32_t ret = GetOptionalUint32Prop(env, funcResult, "retryCount", resultParams.retryCnt);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "GetAuthUkeyPinParams: retryCount failed");
+    (void)GetOptionalInt32Prop(env, funcResult, "authState", resultParams.authState);
 
-    return GetOptionalInt32Prop(env, funcResult, "authState", resultParams.authState);
+    return GetOptionalUint32Prop(env, funcResult, "retryCount", resultParams.retryCnt);
 }
 
 int32_t GetUkeyPinAuthStateParams(const napi_env &env, const napi_value &funcResult, CryptoResultParam &resultParams)
@@ -377,6 +368,8 @@ int32_t GetUkeyPinAuthStateParams(const napi_env &env, const napi_value &funcRes
 
 int32_t GetExportCertificateParams(const napi_env &env, const napi_value &funcResult, CryptoResultParam &resultParams)
 {
+    HKS_EXT_IF_TRUE_RETURN(resultParams.errCode != 0, HKS_SUCCESS);
+
     napi_value nativeArray = nullptr;
     auto status = napi_get_named_property(env, funcResult, "certs", &nativeArray);
     HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
@@ -384,10 +377,10 @@ int32_t GetExportCertificateParams(const napi_env &env, const napi_value &funcRe
 
     napi_valuetype valueType = napi_undefined;
     status = napi_typeof(env, nativeArray, &valueType);
-    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok || valueType == napi_undefined, HKS_SUCCESS,
-        "certs is undefined, status:%d", status);
+    HKS_EXT_IF_TRUE_LOGE_RETURN(status != napi_ok || valueType == napi_undefined,
+        HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED, "certs is undefined, status:%d", status);
 
-    HKS_EXT_IF_TRUE_LOGE_RETURN(valueType != napi_object, HKS_ERROR_EXT_GET_VALUE_FAILED,
+    HKS_EXT_IF_TRUE_LOGE_RETURN(valueType != napi_object, HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED,
         "certs is not an object(array), type:%d", valueType);
 
     bool isArray = false;
