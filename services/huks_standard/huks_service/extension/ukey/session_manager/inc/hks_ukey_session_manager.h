@@ -21,6 +21,7 @@
 #include "hks_provider_life_cycle_manager.h"
 #include "singleton.h"
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <stdint.h>
 #include <string>
@@ -72,6 +73,9 @@ private:
     std::pair<int32_t, uint32_t> GenRandomUint32();
     void ClearSessionHandleMap(std::vector<uint32_t> &toRemove);
     OHOS::SafeMap<uint32_t, HandleInfo> m_handlers{};
+    // Serializes the check-then-insert sequence in ExtensionInitSession so that
+    // concurrent callers cannot both pass the handle-count limits.
+    std::mutex m_sessionMutex;
 };
 
 }
