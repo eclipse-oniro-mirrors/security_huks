@@ -96,13 +96,47 @@ int32_t HksSessionManager::CheckParmSetPurposeAndCheckAuth(const HksProcessInfo 
 }
 
 constexpr int32_t MAX_HANDLE_SIZE = 96;
+int32_t HksSessionManager::CommitSessionHandle(const HksProcessInfo &processInfo, const ProviderInfo &providerInfo,
+    const OHOS::sptr<IHuksAccessExtBase> &proxy, const std::string &sessionHandle,
+    const CppParamSet &newParamSet, const std::string &index, uint32_t &handle)
+{
+    auto rollbackRemoteSession = [&proxy, &sessionHandle, &newParamSet]() {
+        std::vector<uint8_t> tmpVec;
+        HksExternalErrorInfoIdl rollbackErrorInfo = {HKS_ERROR_EXT_JS_METHOD_ERROR, HKS_DEFAULT_ERROR_DESC, false};
+        (void)proxy->FinishSession(sessionHandle, newParamSet, tmpVec, tmpVec, rollbackErrorInfo);
+    };
+    std::unique_lock<std::mutex> lock(m_sessionMutex);
+    if (!CheckSingleCallerCanInitSession(processInfo) || m_handlers.Size() >= MAX_HANDLE_SIZE) {
+        lock.unlock();
+        rollbackRemoteSession();
+        return HKS_ERROR_SESSION_REACHED_LIMIT;
+    }
+    auto random = GenRandomUint32();
+    if (random.first != HKS_SUCCESS) {
+        lock.unlock();
+        rollbackRemoteSession();
+        return random.first;
+    }
+    HandleInfo handleInfo{sessionHandle, providerInfo, processInfo.uidInt, index};
+    if (!m_handlers.Insert(random.second, handleInfo)) {
+        lock.unlock();
+        rollbackRemoteSession();
+        return HKS_ERROR_CODE_KEY_ALREADY_EXIST;
+    }
+    handle = random.second;
+    return HKS_SUCCESS;
+}
+
 int32_t HksSessionManager::ExtensionInitSession(struct HksProcessWithErrorInfo &processAndError,
     const std::string &index, const CppParamSet &paramSet, uint32_t &handle)
 {
+    const uint32_t uid = processAndError.processInfo->uidInt;
+    std::unique_lock<std::mutex> lock(m_sessionMutex);
     HKS_IF_TRUE_LOGE_RETURN(!CheckSingleCallerCanInitSession(*processAndError.processInfo),
         HKS_ERROR_SESSION_REACHED_LIMIT, "handle too many, please realse the old")
     HKS_IF_TRUE_LOGE_RETURN(m_handlers.Size() >= MAX_HANDLE_SIZE, HKS_ERROR_SESSION_REACHED_LIMIT,
         "The handle maximum quantity has been reached")
+    lock.unlock();
     int32_t ret = CheckParmSetPurposeAndCheckAuth(*processAndError.processInfo, index, paramSet);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "CheckParmSetPurposeAndCheckAuth failed")
     ProviderInfo providerInfo;
@@ -110,9 +144,8 @@ int32_t HksSessionManager::ExtensionInitSession(struct HksProcessWithErrorInfo &
     std::string sIndexHandle;
     auto handleMgr = HksRemoteHandleManager::GetInstanceWrapper();
     HKS_IF_TRUE_LOGE_RETURN(handleMgr == nullptr, HKS_ERROR_NULL_POINTER, "handleMgr is null");
-    ret = handleMgr->ParseAndValidateIndex(index,
-        processAndError.processInfo->uidInt, providerInfo, sIndexHandle);
-    providerInfo.m_userid = GetEffectiveUserId(paramSet, processAndError.processInfo->uidInt);
+    ret = handleMgr->ParseAndValidateIndex(index, uid, providerInfo, sIndexHandle);
+    providerInfo.m_userid = GetEffectiveUserId(paramSet, uid);
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "ParseAndValidateIndex failed: %" LOG_PUBLIC "d", ret)
 
     std::string sessionHandle;
@@ -126,22 +159,13 @@ int32_t HksSessionManager::ExtensionInitSession(struct HksProcessWithErrorInfo &
 
     HksExternalErrorInfoIdl errorInfo = {HKS_ERROR_EXT_JS_METHOD_ERROR, "", false};
     auto ipcCode = proxy->InitSession(sIndexHandle, newParamSet, sessionHandle, errorInfo);
-    HKS_IF_TRUE_LOGE_RETURN(ipcCode != EOK, HKS_ERROR_IPC_MSG_FAIL, "proxy InitSession ipcCode: %" LOG_PUBLIC "d",
-        ipcCode)
+    HKS_IF_TRUE_LOGE_RETURN(ipcCode != EOK, HKS_ERROR_IPC_MSG_FAIL, "InitSession ipcCode: %" LOG_PUBLIC "d", ipcCode);
     ret = ConvertExtensionToHksErrorCode(errorInfo.errVal, g_initSessionErrCodeMapping);
     HksExtRecordErrInfo(errorInfo, &processAndError.errInfo);
-    
     HKS_IF_TRUE_LOGE_RETURN(ret != HKS_SUCCESS, ret, "proxy InitSession get handle failed: %" LOG_PUBLIC "d", ret)
-    auto random = GenRandomUint32();
-    HKS_IF_TRUE_LOGE_RETURN(random.first != HKS_SUCCESS, random.first,
-        "GenRandomUint32 failed. ret: %" LOG_PUBLIC "d", random.first)
 
-    handle = random.second;
-    HandleInfo handleInfo{sessionHandle, providerInfo, processAndError.processInfo->uidInt, index};
-    bool inserted = m_handlers.Insert(handle, handleInfo);
-    HKS_IF_TRUE_LOGE_RETURN(!inserted, HKS_ERROR_CODE_KEY_ALREADY_EXIST,
-        "ExtensionInitSession: handle collision, insert failed")
-    return HKS_SUCCESS;
+    return CommitSessionHandle(*processAndError.processInfo, providerInfo, proxy, sessionHandle,
+        newParamSet, index, handle);
 }
 
 int32_t HksSessionManager::ExtensionUpdateSession(struct HksProcessWithErrorInfo &processAndError,

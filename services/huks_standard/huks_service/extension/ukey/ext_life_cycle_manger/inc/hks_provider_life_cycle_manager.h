@@ -93,7 +93,6 @@ private:
         const CppParamSet &paramSet, const std::vector<AbilityInfo> &abilityInfoArray);
     int32_t RegisterSingleAbilityWithIndex(const HksProcessInfo &processInfo, const std::string &providerName,
         const CppParamSet &paramSet, const AbilityInfo &abilityInfo);
-    int32_t CheckProviderIndexDuplicate(const ProviderIndexKey &key);
     int32_t UnregisterProviderWithIndexArray(const HksProcessInfo &processInfo, const std::string &providerName,
         const CppParamSet &paramSet, bool isdeath, int32_t &deleteCount);
     int32_t UnregisterSingleAbilityWithIndex(const HksProcessInfo &processInfo, const std::string &providerName,

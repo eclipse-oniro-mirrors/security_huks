@@ -21,6 +21,7 @@
 #include "hks_provider_life_cycle_manager.h"
 #include "singleton.h"
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <stdint.h>
 #include <string>
@@ -71,7 +72,13 @@ private:
     bool CheckSingleCallerCanInitSession(const HksProcessInfo &processInfo);
     std::pair<int32_t, uint32_t> GenRandomUint32();
     void ClearSessionHandleMap(std::vector<uint32_t> &toRemove);
+    int32_t CommitSessionHandle(const HksProcessInfo &processInfo, const ProviderInfo &providerInfo,
+        const OHOS::sptr<IHuksAccessExtBase> &proxy, const std::string &sessionHandle,
+        const CppParamSet &newParamSet, const std::string &index, uint32_t &handle);
     OHOS::SafeMap<uint32_t, HandleInfo> m_handlers{};
+    // Serializes the check-then-insert sequence in ExtensionInitSession so that
+    // concurrent callers cannot both pass the handle-count limits.
+    std::mutex m_sessionMutex;
 };
 
 }

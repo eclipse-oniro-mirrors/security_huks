@@ -21,6 +21,7 @@
 #include "hks_provider_life_cycle_manager.h"
 #include "singleton.h"
 #include <memory>
+#include <mutex>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
@@ -259,6 +260,10 @@ private:
 
     OHOS::SafeMap<std::pair<uint32_t, std::string>, std::string> uidIndexToHandle_;
     OHOS::SafeMap<ProviderInfo, int32_t> providerInfoToNum_;
+
+    // Protects composite operations on uidIndexToHandle_ and providerInfoToNum_.
+    // SafeMap only locks each single operation, not a find-then-write sequence.
+    std::mutex m_remoteHandleMutex;
 };
 }
 }

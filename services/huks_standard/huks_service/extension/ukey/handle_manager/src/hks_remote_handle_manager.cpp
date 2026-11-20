@@ -145,8 +145,11 @@ int32_t HksRemoteHandleManager::ParseAndValidateIndex(const std::string &index, 
     int32_t ret = GetProviderInfoAndIndex(index, providerInfo, newIndex);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INVALID_ARGUMENT,
         "Parse index and provider info failed: %" LOG_PUBLIC "d", ret)
-    HKS_IF_TRUE_LOGE_RETURN(!uidIndexToHandle_.Find({uid, index}, handle), HKS_ERROR_NOT_EXIST,
-        "Remote handle not found for uid: %" LOG_PUBLIC "u, index: %" LOG_PUBLIC "s", uid, index.c_str())
+    {
+        std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
+        HKS_IF_TRUE_LOGE_RETURN(!uidIndexToHandle_.Find({uid, index}, handle), HKS_ERROR_NOT_EXIST,
+            "Remote handle not found for uid: %" LOG_PUBLIC "u, index: %" LOG_PUBLIC "s", uid, index.c_str())
+    }
     return HKS_SUCCESS;
 }
 
@@ -177,14 +180,25 @@ int32_t HksRemoteHandleManager::CreateRemoteHandle(const HksProcessInfo &process
     ClearMapByHandle(ret, handle);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "Create remote handle failed: %" LOG_PUBLIC "d", ret)
     HKS_LOG_I("uidIndexToHandle_ is %" LOG_PUBLIC "u,%" LOG_PUBLIC "s", processInfo.uidInt, index.c_str());
-    HKS_IF_TRUE_LOGE_RETURN(IsProviderNumExceedLimit(providerInfo),
-        HKS_ERROR_HANDLE_REACH_MAX_NUM, "Provider num exceed limit")
-    int32_t num = 0;
-    (void)providerInfoToNum_.Find(providerInfo, num);
-    providerInfoToNum_.EnsureInsert(providerInfo, num + 1);
-    if (!uidIndexToHandle_.Insert({processInfo.uidInt, index}, handle)) {
-        providerInfoToNum_.EnsureInsert(providerInfo, num);
-        return HKS_ERROR_CODE_KEY_ALREADY_EXIST;
+    {
+        std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
+        if (IsProviderNumExceedLimit(providerInfo)) {
+            ret = HKS_ERROR_HANDLE_REACH_MAX_NUM;
+        } else {
+            int32_t num = 0;
+            (void)providerInfoToNum_.Find(providerInfo, num);
+            providerInfoToNum_.EnsureInsert(providerInfo, num + 1);
+            if (!uidIndexToHandle_.Insert({processInfo.uidInt, index}, handle)) {
+                providerInfoToNum_.EnsureInsert(providerInfo, num);
+                ret = HKS_ERROR_CODE_KEY_ALREADY_EXIST;
+            }
+        }
+    }
+    if (ret != HKS_SUCCESS) {
+        HksExternalErrorInfoIdl rollbackErrorInfo = {HKS_ERROR_EXT_JS_METHOD_ERROR, "", false};
+        (void)proxy->CloseRemoteHandle(handle, newParamSet, rollbackErrorInfo);
+        HKS_LOG_E("CreateRemoteHandle failed, rollback remote handle, ret = %" LOG_PUBLIC "d", ret);
+        return ret;
     }
     return HKS_SUCCESS;
 }
@@ -217,13 +231,16 @@ int32_t HksRemoteHandleManager::CloseRemoteHandle(const HksProcessInfo &processI
     HKS_LOG_I("uidIndexToHandle_ is %" LOG_PUBLIC "u,%" LOG_PUBLIC "s", processInfo.uidInt, index.c_str());
     HKS_IF_NOT_SUCC_LOGE(RemoteClearPinStatus(processInfo, index, newParamSet, nullptr),
         "Remote clear pin status failed: %" LOG_PUBLIC "u", processInfo.uidInt)
-    uidIndexToHandle_.Erase({processInfo.uidInt, index});
-    int32_t num = 0;
-    if (providerInfoToNum_.Find(providerInfo, num)) {
-        if (num == 1) {
-            providerInfoToNum_.Erase(providerInfo);
-        } else {
-            providerInfoToNum_.EnsureInsert(providerInfo, num - 1);
+    {
+        std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
+        uidIndexToHandle_.Erase({processInfo.uidInt, index});
+        int32_t num = 0;
+        if (providerInfoToNum_.Find(providerInfo, num)) {
+            if (num == 1) {
+                providerInfoToNum_.Erase(providerInfo);
+            } else {
+                providerInfoToNum_.EnsureInsert(providerInfo, num - 1);
+            }
         }
     }
     return HKS_SUCCESS;
@@ -641,6 +658,7 @@ int32_t HksRemoteHandleManager::GetResourceId(const HksProcessInfo &processInfo,
 // the corresponding entry in providerInfoToNum_.
 int32_t HksRemoteHandleManager::ClearUidIndexMap(const ProviderInfo &providerInfo)
 {
+    std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
     std::vector<std::pair<uint32_t, std::string>> indicesToRemove;
     std::vector<ProviderInfo> providersToRemove;
     auto collectToRemoveFunc = [&](std::pair<uint32_t, std::string> key, std::string &value) {
@@ -674,7 +692,10 @@ void HksRemoteHandleManager::ClearAuthState(const HksProcessInfo &processInfo)
     auto iterFunc = [&](std::pair<uint32_t, std::string> key, std::string &handle) {
         HKS_IF_TRUE_EXCU(key.first == processInfo.uidInt, keysToRemove.push_back(key));
     };
-    uidIndexToHandle_.Iterate(iterFunc);
+    {
+        std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
+        uidIndexToHandle_.Iterate(iterFunc);
+    }
     struct HksParam uid = {.tag = HKS_EXT_CRYPTO_TAG_UID, .int32Param = processInfo.uidInt};
     CppParamSet paramSet = CppParamSet({uid});
     
@@ -703,6 +724,7 @@ void HksRemoteHandleManager::ClearMapByHandle(const int32_t &ret, const std::str
     if (ret != HUKS_ERR_CODE_CRYPTO_FAIL && ret != HUKS_ERR_CODE_ITEM_NOT_EXIST) {
         return;
     }
+    std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
     std::vector<std::pair<uint32_t, std::string>> keysToRemove;
     auto iterFunc = [&](std::pair<uint32_t, std::string> key, std::string &value) {
         if (value == handle) {
@@ -732,7 +754,10 @@ void HksRemoteHandleManager::ClearMapByUid(const uint32_t uid)
             keysToRemove.push_back(key);
         }
     };
-    uidIndexToHandle_.Iterate(iterFunc);
+    {
+        std::lock_guard<std::mutex> lock(m_remoteHandleMutex);
+        uidIndexToHandle_.Iterate(iterFunc);
+    }
     for (auto &key : keysToRemove) {
         HKS_IF_NOT_SUCC_LOGE(CloseRemoteHandle(processInfo, key.second, paramSet, nullptr),
             "Remote close handle failed: %" LOG_PUBLIC "u", uid)
