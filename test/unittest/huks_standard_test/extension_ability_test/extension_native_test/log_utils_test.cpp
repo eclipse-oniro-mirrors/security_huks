@@ -60,6 +60,20 @@ HWTEST_F(LogUtilsTest, LogPrint_0002, testing::ext::TestSize.Level0)
     HksFreeImpl(ptr);
 }
 
+HWTEST_F(LogUtilsTest, LogPrint_0003, testing::ext::TestSize.Level0)
+{
+    // funName overlong -> sprintf_s returns negative, cover the early-return branch.
+    std::string longFunName(2000, 'F');
+    LogPrint(LOG_LEVEL_DEBUG, longFunName.c_str(), "message");
+
+    // fmt content overlong -> vsprintf_s returns negative, cover the early-return branch.
+    LogPrint(LOG_LEVEL_DEBUG, "TestFunc", "%s", std::string(2000, 'B').c_str());
+
+    void* ptr = HksMalloc(1);
+    EXPECT_NE(ptr, nullptr);
+    HksFreeImpl(ptr);
+}
+
 HWTEST_F(LogUtilsTest, LOGD_Test, testing::ext::TestSize.Level0)
 {
     LOGD("debug macro test %d", 100);

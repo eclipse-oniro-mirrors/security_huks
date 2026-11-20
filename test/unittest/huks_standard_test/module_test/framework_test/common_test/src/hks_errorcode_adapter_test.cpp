@@ -79,4 +79,28 @@ HWTEST_F(HksErrorCodeAdapterTest, HksErrorCodeAdapterTest002, TestSize.Level0)
     struct HksResult result = HksConvertErrCode(ret);
     ASSERT_EQ(result.errorCode, HUKS_ERR_CODE_EXTERNAL_ERROR) << "HksConvertErrCode failed, ret = " << ret;
 }
+
+/**
+ * @tc.name: HksErrorCodeAdapterTest.HksErrorCodeAdapterTest003
+ * @tc.desc: tdd HksConvertErrCode table match, expecting HUKS_ERR_CODE_ILLEGAL_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksErrorCodeAdapterTest, HksErrorCodeAdapterTest003, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksErrorCodeAdapterTest003");
+    struct HksResult result = HksConvertErrCode(HKS_ERROR_INVALID_ARGUMENT);
+    ASSERT_EQ(result.errorCode, HUKS_ERR_CODE_ILLEGAL_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksErrorCodeAdapterTest.HksErrorCodeAdapterTest005
+ * @tc.desc: tdd HksReplaceErrCodeIf401, expecting HKS_ERROR_NEW_INVALID_ARGUMENT / unchanged
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksErrorCodeAdapterTest, HksErrorCodeAdapterTest005, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksErrorCodeAdapterTest005");
+    ASSERT_EQ(HksReplaceErrCodeIf401(HKS_ERROR_INVALID_ARGUMENT), HKS_ERROR_NEW_INVALID_ARGUMENT);
+    ASSERT_EQ(HksReplaceErrCodeIf401(HKS_SUCCESS), HKS_SUCCESS);
+}
 }

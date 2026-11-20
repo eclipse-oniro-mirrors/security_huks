@@ -385,4 +385,101 @@ HWTEST_F(HksParamTest, HksParamTest022, TestSize.Level0)
     int32_t ret = HksDeleteTagsFromParamSet(&exceedCnt, 0, &paramSet, &paramSetPTR);
     ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT)<< "HksDeleteTagsFromParamSet failed, ret = " << ret;
 }
+
+/**
+ * @tc.name: HksParamTest.HksParamTest023
+ * @tc.desc: tdd HksCheckParamSetTag, expecting HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksParamTest, HksParamTest023, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksParamTest023");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "HksInitParamSet failed, ret = " << ret;
+    struct HksParam param = { .tag = HKS_TAG_INVALID, .uint32Param = 0 };
+    ret = HksAddParams(paramSet, &param, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "HksAddParams failed, ret = " << ret;
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "HksBuildParamSet failed, ret = " << ret;
+    ret = HksCheckParamSetTag(paramSet);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "HksCheckParamSetTag failed, ret = " << ret;
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksParamTest.HksParamTest024
+ * @tc.desc: tdd HksAddParams, expecting HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksParamTest, HksParamTest024, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksParamTest024");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "HksInitParamSet failed, ret = " << ret;
+    struct HksBlob blob = { .size = 0, .data = nullptr };
+    struct HksParam param = { .tag = HKS_TAG_USER_AUTH_SECURE_UID, .blob = blob };
+    ret = HksAddParams(paramSet, &param, 1);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "HksAddParams failed, ret = " << ret;
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksParamTest.HksParamTest025
+ * @tc.desc: tdd HksAddParamsWithFilter, expecting HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksParamTest, HksParamTest025, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksParamTest025");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "HksInitParamSet failed, ret = " << ret;
+    const char *baseData = "1";
+    struct HksBlob blob = { .size = UINT32_MAX, .data = (uint8_t *)baseData };
+    struct HksParam param = { .tag = HKS_TAG_USER_AUTH_SECURE_UID, .blob = blob };
+    ret = HksAddParamsWithFilter(paramSet, &param, 1);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "HksAddParamsWithFilter failed, ret = " << ret;
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksParamTest.HksParamTest027
+ * @tc.desc: tdd HksCheckParamMatch, expecting HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksParamTest, HksParamTest027, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksParamTest027");
+    struct HksBlob baseBlob = { .size = 1, .data = nullptr };
+    struct HksParam baseParam = { .tag = HKS_TAG_USER_AUTH_SECURE_UID, .blob = baseBlob };
+    const char *otherData = "1";
+    struct HksBlob otherBlob = { .size = 1, .data = (uint8_t *)otherData };
+    struct HksParam otherParam = { .tag = HKS_TAG_USER_AUTH_SECURE_UID, .blob = otherBlob };
+    int32_t ret = HksCheckParamMatch(&baseParam, &otherParam);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "HksCheckParamMatch failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksParamTest.HksParamTest028
+ * @tc.desc: tdd HksFreshParamSet, expecting HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksParamTest, HksParamTest028, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksParamTest028");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "HksInitParamSet failed, ret = " << ret;
+    paramSet->paramSetSize = sizeof(struct HksParamSet) + sizeof(struct HksParam);
+    paramSet->paramsCnt = 1;
+    uint8_t data = 0;
+    paramSet->params[0].tag = HKS_TAG_USER_AUTH_SECURE_UID;
+    paramSet->params[0].blob.size = UINT32_MAX;
+    paramSet->params[0].blob.data = &data;
+    ret = HksFreshParamSet(paramSet, true);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "HksFreshParamSet failed, ret = " << ret;
+    HksFreeParamSet(&paramSet);
+}
 }

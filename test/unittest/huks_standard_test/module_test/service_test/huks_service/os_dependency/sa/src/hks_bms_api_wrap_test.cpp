@@ -55,4 +55,43 @@ HWTEST_F(HksBmsApiWrapTest, HksBmsApiWrapTest001, TestSize.Level0)
     int32_t ret = GetCallerName(nullptr, nullptr);
     EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER);
 }
+
+/**
+ * @tc.name: HksBmsApiWrapTest.HksBmsApiWrapTest002
+ * @tc.desc: test get hap/sa info with null pointer
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBmsApiWrapTest, HksBmsApiWrapTest002, TestSize.Level0)
+{
+    struct HksProcessInfo processInfo = {};
+    struct HksBlob info = {};
+
+    int32_t ret = HksGetHapInfo(nullptr, &info);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "processInfo should be nullptr";
+
+    ret = HksGetHapInfo(&processInfo, nullptr);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "hapInfo should be nullptr";
+
+    ret = HksGetSaInfo(nullptr);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "saInfo should be nullptr";
+}
+
+#ifdef L2_STANDARD
+/**
+ * @tc.name: HksBmsApiWrapTest.HksBmsApiWrapTest003
+ * @tc.desc: test get developer id and anco attest application id with null pointer
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksBmsApiWrapTest, HksBmsApiWrapTest003, TestSize.Level0)
+{
+    struct HksBlob developerId = {};
+
+    int32_t ret = HksGetDeveloperId(nullptr, &developerId);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "processInfo should be nullptr";
+
+    ret = HksGetAncoAttestApplicationId(0, 0, 0, nullptr, nullptr);
+    EXPECT_EQ(ret, HKS_ERROR_NULL_POINTER) << "outAppId should be nullptr";
+}
+#endif
+
 }

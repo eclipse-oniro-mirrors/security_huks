@@ -27,6 +27,7 @@
 #include "hks_plugin_def.h"
 #include "iremote_object.h"
 #include "hks_task_executor.h"
+#include "app_observer.h"
 
 namespace OHOS::Security::Huks {
 

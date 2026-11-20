@@ -531,4 +531,348 @@ HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest008, TestSize.Level0)
     FreeProcessInfo(&processInfo);
 }
 
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest009
+ * @tc.desc: tdd HksGetInitEventInfo, key access control and key info tag reading
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest009, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest009");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+    uint8_t aliasData[] = "test_alias009";
+    struct HksBlob keyAlias = { sizeof(aliasData), aliasData };
+
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT },
+        { .tag = HKS_TAG_USER_AUTH_TYPE, .uint32Param = 1 },
+        { .tag = HKS_TAG_KEY_AUTH_ACCESS_TYPE, .uint32Param = 2 },
+        { .tag = HKS_TAG_CHALLENGE_TYPE, .uint32Param = 3 },
+        { .tag = HKS_TAG_FRONT_USER_ID, .int32Param = 100 },
+        { .tag = HKS_TAG_USER_AUTH_MODE, .uint32Param = 4 },
+        { .tag = HKS_TAG_IS_DEVICE_PASSWORD_SET, .boolParam = true },
+        { .tag = HKS_TAG_SPECIFIC_USER_ID, .int32Param = 200 },
+    };
+    struct HksParamSet *ps = nullptr;
+    int32_t ret = BuildParamSet(&ps, params, sizeof(params) / sizeof(params[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksEventInfo ev = {};
+    ret = HksGetInitEventInfo(&keyAlias, nullptr, ps, &processInfo, &ev);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_EQ(ev.cryptoInfo.accessCtlInfo.accessType, 2u);
+    EXPECT_EQ(ev.cryptoInfo.accessCtlInfo.challengeType, 3u);
+    EXPECT_EQ(ev.cryptoInfo.accessCtlInfo.frontUserId, 100u);
+    EXPECT_EQ(ev.cryptoInfo.accessCtlInfo.authMode, 4u);
+    EXPECT_EQ(ev.cryptoInfo.accessCtlInfo.needPwdSet, 1u);
+    EXPECT_EQ(ev.cryptoInfo.keyInfo.specificUserId, 200);
+
+    HksFreeParamSet(&ps);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest010
+ * @tc.desc: tdd HksGetInitEventInfo, agree purpose with pubKeyType and key blob paramset
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest010, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest010");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+    uint8_t aliasData[] = "test_alias010";
+    struct HksBlob keyAlias = { sizeof(aliasData), aliasData };
+
+    struct HksParam keyPsParams[] = {
+        { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_AES },
+    };
+    struct HksParamSet *keyPs = nullptr;
+    int32_t ret = BuildParamSet(&keyPs, keyPsParams, sizeof(keyPsParams) / sizeof(keyPsParams[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob key = { keyPs->paramSetSize, (uint8_t *)keyPs };
+
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_AGREE },
+        { .tag = HKS_TAG_AGREE_PUBKEY_TYPE, .uint32Param = 1 },
+    };
+    struct HksParamSet *ps = nullptr;
+    ret = BuildParamSet(&ps, params, sizeof(params) / sizeof(params[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksEventInfo ev = {};
+    ret = HksGetInitEventInfo(&keyAlias, &key, ps, &processInfo, &ev);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_EQ(ev.common.eventId, HKS_EVENT_AGREE);
+    EXPECT_EQ(ev.agreeDeriveInfo.pubKeyType, 1u);
+
+    HksFreeParamSet(&ps);
+    HksFreeParamSet(&keyPs);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest011
+ * @tc.desc: tdd HksOneStageEventReport, attest tags and key blob paramset switch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest011, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest011");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+    uint8_t aliasData[] = "test_alias011";
+    struct HksBlob keyAlias = { sizeof(aliasData), aliasData };
+
+    struct HksParam keyPsParams[] = {
+        { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_RSA },
+    };
+    struct HksParamSet *keyPs = nullptr;
+    int32_t ret = BuildParamSet(&keyPs, keyPsParams, sizeof(keyPsParams) / sizeof(keyPsParams[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob key = { keyPs->paramSetSize, (uint8_t *)keyPs };
+
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_ATTESTATION_CERT_TYPE, .uint32Param = 1 },
+        { .tag = HKS_TAG_ATTESTATION_MODE, .uint32Param = 0 },
+    };
+    struct HksParamSet *ps = nullptr;
+    ret = BuildParamSet(&ps, params, sizeof(params) / sizeof(params[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksOneStageReportInfo info = {};
+    info.errCode = HKS_SUCCESS;
+    info.startTime = 0;
+    info.traceId = 0;
+    info.funcName = "HksAttest";
+    info.stage = HKS_ONE_STAGE_ATTEST;
+
+    ret = HksOneStageEventReport(&keyAlias, &key, ps, &processInfo, &info);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+
+    HksFreeParamSet(&ps);
+    HksFreeParamSet(&keyPs);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest012
+ * @tc.desc: tdd HksThreeStageReport, null normal operation with init success
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest012, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest012");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+
+    struct HksParam purposeParams[] = {
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT },
+    };
+    struct HksParamSet *ps = nullptr;
+    int32_t ret = BuildParamSet(&ps, purposeParams, sizeof(purposeParams) / sizeof(purposeParams[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksThreeStageReportInfo reportInfo = {};
+    reportInfo.errCode = HKS_SUCCESS;
+    reportInfo.stage = HKS_INIT;
+    reportInfo.startTime = 0;
+    reportInfo.inDataSize = 0;
+    reportInfo.traceId = 0;
+    reportInfo.handle = nullptr;
+    reportInfo.unionOp = { false, { nullptr } };
+
+    ret = HksThreeStageReport("HksServiceInit", &processInfo, ps, &reportInfo);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+
+    HksFreeParamSet(&ps);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest013
+ * @tc.desc: tdd HksThreeStageReport, null se operation with init success
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest013, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest013");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+
+    struct HksParam purposeParams[] = {
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT },
+    };
+    struct HksParamSet *ps = nullptr;
+    int32_t ret = BuildParamSet(&ps, purposeParams, sizeof(purposeParams) / sizeof(purposeParams[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksThreeStageReportInfo reportInfo = {};
+    reportInfo.errCode = HKS_SUCCESS;
+    reportInfo.stage = HKS_INIT;
+    reportInfo.startTime = 0;
+    reportInfo.inDataSize = 0;
+    reportInfo.traceId = 0;
+    reportInfo.handle = nullptr;
+    reportInfo.unionOp = { true, { nullptr } };
+
+    ret = HksThreeStageReport("HksServiceInit", &processInfo, ps, &reportInfo);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+
+    HksFreeParamSet(&ps);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest014
+ * @tc.desc: tdd normal op, HksThreeStageReport update failure stats updateCost/updateCount
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest014, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest014");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+
+    struct HksParamSet *emptyPs = nullptr;
+    int32_t ret = BuildParamSet(&emptyPs, nullptr, 0);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint64_t handleValue = 10003;
+    struct HksBlob handleBlob = { sizeof(uint64_t), (uint8_t *)&handleValue };
+    ret = HksCreateOperation(&processInfo, emptyPs, &handleBlob, true);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksOperation *operation = QueryOperationAndMarkInUse(&processInfo, &handleBlob);
+    ASSERT_NE(operation, nullptr);
+    operation->eventInfo = {};
+    operation->eventInfo.common.eventId = HKS_EVENT_CRYPTO;
+    operation->eventInfo.cryptoInfo.keyInfo.purpose = HKS_KEY_PURPOSE_ENCRYPT;
+    InitNormalOpErrMsgBlob(operation);
+    MarkOperationUnUse(operation);
+
+    struct HksParam freshParams[] = {
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT },
+        { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_AES },
+    };
+    struct HksParamSet *freshPs = nullptr;
+    ret = BuildParamSet(&freshPs, freshParams, sizeof(freshParams) / sizeof(freshParams[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksThreeStageReportInfo reportInfo = {};
+    reportInfo.errCode = HKS_FAILURE;
+    reportInfo.stage = HKS_UPDATE;
+    reportInfo.startTime = 0;
+    reportInfo.inDataSize = 0;
+    reportInfo.traceId = 0;
+    reportInfo.handle = &handleBlob;
+    reportInfo.unionOp.isSe = false;
+    reportInfo.unionOp.op.operation = operation;
+
+    (void)HksThreeStageReport("HksServiceUpdate", &processInfo, freshPs, &reportInfo);
+
+    EXPECT_GE(operation->eventInfo.common.statInfo.updateCount, 1u);
+
+    DeleteOperation(&handleBlob);
+    HksFreeParamSet(&emptyPs);
+    HksFreeParamSet(&freshPs);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest015
+ * @tc.desc: tdd normal op, HksThreeStageReport init success calls HandleSuccessStage
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest015, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest015");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+
+    struct HksParamSet *emptyPs = nullptr;
+    int32_t ret = BuildParamSet(&emptyPs, nullptr, 0);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint64_t handleValue = 10004;
+    struct HksBlob handleBlob = { sizeof(uint64_t), (uint8_t *)&handleValue };
+    ret = HksCreateOperation(&processInfo, emptyPs, &handleBlob, true);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksOperation *operation = QueryOperationAndMarkInUse(&processInfo, &handleBlob);
+    ASSERT_NE(operation, nullptr);
+    operation->eventInfo = {};
+    operation->eventInfo.common.eventId = HKS_EVENT_CRYPTO;
+    operation->eventInfo.cryptoInfo.keyInfo.purpose = HKS_KEY_PURPOSE_ENCRYPT;
+    InitNormalOpErrMsgBlob(operation);
+    MarkOperationUnUse(operation);
+
+    struct HksParam purposeParams[] = {
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT },
+    };
+    struct HksParamSet *purposePs = nullptr;
+    ret = BuildParamSet(&purposePs, purposeParams, sizeof(purposeParams) / sizeof(purposeParams[0]));
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    HksThreeStageReportInfo reportInfo = {};
+    reportInfo.errCode = HKS_SUCCESS;
+    reportInfo.stage = HKS_INIT;
+    reportInfo.startTime = 0;
+    reportInfo.inDataSize = 0;
+    reportInfo.traceId = 0;
+    reportInfo.handle = &handleBlob;
+    reportInfo.unionOp.isSe = false;
+    reportInfo.unionOp.op.operation = operation;
+
+    ret = HksThreeStageReport("HksServiceInit", &processInfo, purposePs, &reportInfo);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_NE(operation->errMsgBlob.data, nullptr);
+    EXPECT_GT(operation->errMsgBlob.size, 0u);
+
+    DeleteOperation(&handleBlob);
+    HksFreeParamSet(&emptyPs);
+    HksFreeParamSet(&purposePs);
+    FreeProcessInfo(&processInfo);
+}
+
+/**
+ * @tc.name: HksReportThreeStageTest.HksReportThreeStageTest016
+ * @tc.desc: tdd HksServiceInitReport, normal/se operation not exist
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksReportThreeStageTest, HksReportThreeStageTest016, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksReportThreeStageTest016");
+    struct HksProcessInfo processInfo;
+    BuildProcessInfo(&processInfo, 100, 200);
+
+    struct HksParamSet *ps = nullptr;
+    int32_t ret = BuildParamSet(&ps, nullptr, 0);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint64_t handleValue = 999999;
+    struct HksBlob handleBlob = { sizeof(uint64_t), (uint8_t *)&handleValue };
+
+    HksThreeStageReportInfo reportInfo = {};
+    reportInfo.errCode = HKS_SUCCESS;
+    reportInfo.stage = HKS_INIT;
+    reportInfo.startTime = 0;
+    reportInfo.inDataSize = 0;
+    reportInfo.traceId = 0;
+    reportInfo.handle = &handleBlob;
+
+    HksEventInfo eventInfo = {};
+    reportInfo.unionOp = { false, { nullptr } };
+    ret = HksServiceInitReport("HksServiceInit", &processInfo, ps, &reportInfo, &eventInfo);
+    EXPECT_EQ(ret, HKS_ERROR_NOT_EXIST);
+
+    reportInfo.unionOp = { true, { nullptr } };
+    ret = HksServiceInitReport("HksServiceInit", &processInfo, ps, &reportInfo, &eventInfo);
+    EXPECT_EQ(ret, HKS_ERROR_NOT_EXIST);
+
+    HksFreeParamSet(&ps);
+    FreeProcessInfo(&processInfo);
+}
+
 }

@@ -40,6 +40,12 @@ bool HksIsCallerSystemApp(const HksProcessInfo *processInfo)
 
 int32_t HksGetBundleNameFromUid(uint32_t uid, std::string &bundleName)
 {
-    bundleName = "com.huawei.extensionhap.test";
+    // uid==100 (CreateTestProcessInfo in app_observer_test) has no bundle name,
+    // so RegisterObserver returns INVALID_ARGUMENT early instead of invoking real AMS.
+    if (uid == 100) {
+        bundleName = "";
+    } else {
+        bundleName = "com.huawei.extensionhap.test";
+    }
     return HKS_SUCCESS;
 }

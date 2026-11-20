@@ -306,4 +306,280 @@ HWTEST_F(HksStorageUtilTest, HksStorageUtilTest007, TestSize.Level0)
     ret = HksGetFileInfo(&material, &fileInfo);
     ASSERT_EQ(ret, HKS_ERROR_NOT_SUPPORTED);
 }
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest008
+ * @tc.desc: test ConstructPlainName with int data and too small buffer, expect HKS_ERROR_INSUFFICIENT_MEMORY
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest008, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest008");
+    int value = 123;
+    struct HksBlob blob = { .size = sizeof(int), .data = (uint8_t *)&value };
+    char name[1] = { 0 };
+    int32_t ret = ConstructPlainName(&blob, name, 1);
+    ASSERT_EQ(HKS_ERROR_INSUFFICIENT_MEMORY, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest009
+ * @tc.desc: test ConstructPlainName with too small nameLen, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest009, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest009");
+    uint8_t data[] = { 'a', 'b', 'c' };
+    struct HksBlob blob = { .size = sizeof(data), .data = data };
+    char name[2] = { 0 };
+    int32_t ret = ConstructPlainName(&blob, name, 1);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest010
+ * @tc.desc: test ConstructPlainName with buffer overflow, expect HKS_ERROR_INSUFFICIENT_DATA
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest010, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest010");
+    uint8_t data[] = { 'a', 'b', 'c', 'd', 'e' };
+    struct HksBlob blob = { .size = sizeof(data), .data = data };
+    char name[3] = { 0 };
+    int32_t ret = ConstructPlainName(&blob, name, 3);
+    ASSERT_EQ(HKS_ERROR_INSUFFICIENT_DATA, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest011
+ * @tc.desc: test ConstructName with too small nameLen, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest011, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest011");
+    uint8_t data[] = { 'a' };
+    struct HksBlob blob = { .size = sizeof(data), .data = data };
+    char name[2] = { 0 };
+    int32_t ret = ConstructName(&blob, name, 1);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest012
+ * @tc.desc: test ConstructName with buffer overflow, expect HKS_ERROR_INSUFFICIENT_DATA
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest012, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest012");
+    uint8_t data[] = { 'a', 'b', 'c', 'd', 'e' };
+    struct HksBlob blob = { .size = sizeof(data), .data = data };
+    char name[4] = { 0 };
+    int32_t ret = ConstructName(&blob, name, 4);
+    ASSERT_EQ(HKS_ERROR_INSUFFICIENT_DATA, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest013
+ * @tc.desc: test ConstructBlob with incomplete encoded char, expect HKS_ERROR_INVALID_KEY_FILE
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest013, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest013");
+    const char *src = "+";
+    uint8_t buf[4] = { 0 };
+    struct HksBlob blob = { .size = sizeof(buf), .data = buf };
+    int32_t ret = ConstructBlob(src, &blob);
+    ASSERT_EQ(HKS_ERROR_INVALID_KEY_FILE, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest014
+ * @tc.desc: test ConstructBlob with too small blob, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest014, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest014");
+    const char *src = "abc";
+    uint8_t buf[1] = { 0 };
+    struct HksBlob blob = { .size = sizeof(buf), .data = buf };
+    int32_t ret = ConstructBlob(src, &blob);
+    ASSERT_EQ(HKS_ERROR_BUFFER_TOO_SMALL, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest015
+ * @tc.desc: test ConstructBlob with null blob data, expect HKS_ERROR_INSUFFICIENT_MEMORY
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest015, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest015");
+    const char *src = "ab";
+    struct HksBlob blob = { .size = 4, .data = nullptr };
+    int32_t ret = ConstructBlob(src, &blob);
+    ASSERT_EQ(HKS_ERROR_INSUFFICIENT_MEMORY, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest016
+ * @tc.desc: test GetPath with empty path, expect HKS_ERROR_INTERNAL_ERROR
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest016, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest016");
+    char target[32] = { 0 };
+    int32_t ret = GetPath("", "name", target, sizeof(target), HKS_STORAGE_BAK_FLAG_FLASE);
+    ASSERT_EQ(HKS_ERROR_INTERNAL_ERROR, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest017
+ * @tc.desc: test GetPath with too small targetPath for name, expect HKS_ERROR_BAD_STATE
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest017, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest017");
+    char target[4] = { 0 };
+    int32_t ret = GetPath("a", "name", target, 4, HKS_STORAGE_BAK_FLAG_FLASE);
+    ASSERT_EQ(HKS_ERROR_BAD_STATE, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest018
+ * @tc.desc: test GetPath with too small targetPath for bak suffix, expect HKS_ERROR_BAD_STATE
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest018, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest018");
+    char target[7] = { 0 };
+    int32_t ret = GetPath("a", "b", target, 7, HKS_STORAGE_BAK_FLAG_TRUE);
+    ASSERT_EQ(HKS_ERROR_BAD_STATE, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest019
+ * @tc.desc: test RecordKeyOperation with invalid operation, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest019, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest019");
+    struct HksStoreMaterial material = { DE_PATH, 0, 0, 0, 0 };
+    material.userIdPath = const_cast<char *>("999");
+    material.uidPath = const_cast<char *>("123");
+    const char *keyAlias = "alias";
+    int32_t ret = RecordKeyOperation(100, &material, keyAlias);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest020
+ * @tc.desc: test FileNameListInit with zero keyCount, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest020, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest020");
+    struct HksFileEntry *fileNameList = nullptr;
+    int32_t ret = FileNameListInit(&fileNameList, 0);
+    ASSERT_EQ(HKS_ERROR_BUFFER_TOO_SMALL, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest021
+ * @tc.desc: test CheckSpecificUserIdAndStorageLevel with null paramSet, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest021, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest021");
+    struct HksProcessInfo processInfo = {};
+    int32_t ret = CheckSpecificUserIdAndStorageLevel(&processInfo, nullptr);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest022
+ * @tc.desc: test CheckSpecificUserIdAndStorageLevel with DE level and negative specificUserId,
+ *           expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest022, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest022");
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_AUTH_STORAGE_LEVEL, .uint32Param = HKS_AUTH_STORAGE_LEVEL_DE },
+        { .tag = HKS_TAG_SPECIFIC_USER_ID, .int32Param = -1 },
+    };
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(HKS_SUCCESS, ret);
+    ret = HksAddParams(paramSet, params, sizeof(params) / sizeof(params[0]));
+    ASSERT_EQ(HKS_SUCCESS, ret);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(HKS_SUCCESS, ret);
+
+    struct HksProcessInfo processInfo = {};
+    ret = CheckSpecificUserIdAndStorageLevel(&processInfo, paramSet);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest023
+ * @tc.desc: test CheckSpecificUserIdAndStorageLevel with CE level only and small userIdInt,
+ *           expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest023, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest023");
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_AUTH_STORAGE_LEVEL, .uint32Param = HKS_AUTH_STORAGE_LEVEL_CE },
+    };
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(HKS_SUCCESS, ret);
+    ret = HksAddParams(paramSet, params, sizeof(params) / sizeof(params[0]));
+    ASSERT_EQ(HKS_SUCCESS, ret);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(HKS_SUCCESS, ret);
+
+    struct HksProcessInfo processInfo = {};
+    processInfo.userIdInt = 99;
+    ret = CheckSpecificUserIdAndStorageLevel(&processInfo, paramSet);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksStorageUtilTest.HksStorageUtilTest024
+ * @tc.desc: test HksGetFileInfo with ../ in keyAliasPath, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksStorageUtilTest, HksStorageUtilTest024, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksStorageUtilTest024");
+    struct HksStoreMaterial material = { DE_PATH, 0, 0, 0, 0 };
+    material.keyAliasPath = const_cast<char *>("../evil");
+    material.storageTypePath = const_cast<char *>("key");
+    material.uidPath = const_cast<char *>("123");
+    material.userIdPath = const_cast<char *>("999");
+#ifdef SUPPORT_STORAGE_BACKUP
+    struct HksStoreFileInfo fileInfo = { { 0 }, { 0 } };
+#else
+    struct HksStoreFileInfo fileInfo = { { 0 } };
+#endif
+    int32_t ret = HksGetFileInfo(&material, &fileInfo);
+    ASSERT_EQ(HKS_ERROR_INVALID_ARGUMENT, ret);
+}
 }

@@ -112,4 +112,40 @@ HWTEST_F(HksStorageFileLockTest, HksStorageFileLockTest_00400, Function | SmallT
     HksStorageFileLockRelease(lock1);
     HksStorageFileLockRelease(lock2);
 }
+
+HWTEST_F(HksStorageFileLockTest, HksStorageFileLockTest_00500, Function | SmallTest | Level1)
+{
+    HksStorageFileLock *lock = HksStorageFileLockCreate(nullptr);
+    EXPECT_EQ(lock, nullptr);
+}
+
+HWTEST_F(HksStorageFileLockTest, HksStorageFileLockTest_00600, Function | SmallTest | Level1)
+{
+    int32_t result = HksStorageFileLockRead(nullptr);
+    EXPECT_EQ(result, -1);
+    result = HksStorageFileUnlockRead(nullptr);
+    EXPECT_EQ(result, -1);
+    result = HksStorageFileLockWrite(nullptr);
+    EXPECT_EQ(result, -1);
+    result = HksStorageFileUnlockWrite(nullptr);
+    EXPECT_EQ(result, -1);
+}
+
+HWTEST_F(HksStorageFileLockTest, HksStorageFileLockTest_00700, Function | SmallTest | Level1)
+{
+    EXPECT_NO_FATAL_FAILURE(HksStorageFileLockRelease(nullptr));
+}
+
+HWTEST_F(HksStorageFileLockTest, HksStorageFileLockTest_00800, Function | SmallTest | Level1)
+{
+    std::string path1 = "/test/testA";
+    std::string path2 = "/test/testB";
+    HksStorageFileLock *lock1 = HksStorageFileLockCreate(&path1[0]);
+    HksStorageFileLock *lock2 = HksStorageFileLockCreate(&path2[0]);
+    EXPECT_NE(lock1, nullptr);
+    EXPECT_NE(lock2, nullptr);
+    EXPECT_NE(lock1, lock2);
+    HksStorageFileLockRelease(lock1);
+    HksStorageFileLockRelease(lock2);
+}
 }  // namespace

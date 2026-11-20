@@ -205,7 +205,6 @@ void HksIpcServiceQueryAbilityInfo(const struct HksBlob *srcData, const uint8_t 
     struct HksProcessInfo processInfo = HKS_PROCESS_INFO_INIT_VALUE;
     struct HksParamSet *paramSet = NULL;
     struct HksBlob outBlob = { 0, NULL };
-    uint32_t abilityType = 0;
     int32_t ret;
 
     do {

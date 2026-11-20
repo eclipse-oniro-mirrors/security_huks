@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <thread>
 #include <chrono>
+#include <map>
+#include <vector>
 
 #include "hks_error_code.h"
 #include "hks_log.h"
@@ -1056,5 +1058,81 @@ HWTEST_F(UkeyCommonTest, UkeyCommonTest037, TestSize.Level0)
     EXPECT_FALSE(specialObj.IsNull());
     EXPECT_TRUE(specialObj["key"].ToString().second.find('\n') != std::string::npos);
     EXPECT_TRUE(specialObj["tab"].ToString().second.find('\t') != std::string::npos);
+}
+
+HWTEST_F(UkeyCommonTest, UkeyCommonTest040, TestSize.Level0)
+{
+    std::map<int32_t, int32_t> mapping = {{1, 100}, {2, 200}};
+    EXPECT_EQ(ConvertExtensionToHksErrorCode(1, mapping), 100);
+    EXPECT_EQ(ConvertExtensionToHksErrorCode(2, mapping), 200);
+    EXPECT_EQ(ConvertExtensionToHksErrorCode(999, mapping), HUKS_ERR_CODE_DEPENDENT_MODULES_ERROR);
+}
+
+HWTEST_F(UkeyCommonTest, UkeyCommonTest041, TestSize.Level0)
+{
+    EXPECT_EQ(HksGetUserIdFromUid(200000), 1);
+    EXPECT_EQ(HksGetUserIdFromUid(400000), 2);
+
+    std::vector<HksParam> noSpecificParams = {
+        {.tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_AES},
+    };
+    CppParamSet noSpecificPs(noSpecificParams);
+    EXPECT_EQ(GetEffectiveUserId(noSpecificPs, 400000), 2);
+
+    std::vector<HksParam> specificParams = {
+        {.tag = HKS_TAG_SPECIFIC_USER_ID, .uint32Param = 1000},
+    };
+    CppParamSet specificPs(specificParams);
+    EXPECT_EQ(GetEffectiveUserId(specificPs, 400000), 1000);
+}
+
+HWTEST_F(UkeyCommonTest, UkeyCommonTest042, TestSize.Level0)
+{
+    ProviderInfo a{};
+    a.m_bundleName = "b";
+    a.m_providerName = "p";
+    a.m_abilityName = "a";
+    a.m_userid = 1;
+    ProviderInfo b = a;
+    EXPECT_TRUE(a == b);
+    b.m_userid = 2;
+    EXPECT_FALSE(a == b);
+    EXPECT_TRUE(a < b || b < a);
+
+    ProviderInfo info{};
+    std::string newIndex;
+    EXPECT_EQ(GetProviderInfoAndIndex("", info, newIndex), HKS_ERROR_JSON_PARSE_FAILED);
+
+    std::string valid = R"({"providerName":"p1","abilityName":"a1","bundleName":"b1","index":"i1"})";
+    EXPECT_EQ(GetProviderInfoAndIndex(valid, info, newIndex), HKS_SUCCESS);
+    EXPECT_EQ(info.m_providerName, "p1");
+    EXPECT_EQ(info.m_abilityName, "a1");
+    EXPECT_EQ(info.m_bundleName, "b1");
+    EXPECT_EQ(newIndex, "i1");
+
+    std::string incomplete = R"({"providerName":"p1","abilityName":"a1","bundleName":"","index":"i1"})";
+    EXPECT_EQ(GetProviderInfoAndIndex(incomplete, info, newIndex), HKS_ERROR_JSON_INVALID_VALUE);
+
+    std::string missing = R"({"providerName":"p1"})";
+    EXPECT_EQ(GetProviderInfoAndIndex(missing, info, newIndex), HKS_ERROR_JSON_TYPE_MISMATCH);
+}
+
+HWTEST_F(UkeyCommonTest, UkeyCommonTest043, TestSize.Level0)
+{
+    std::vector<AbilityInfo> arr;
+    EXPECT_EQ(ParseAbilityInfoArrayFromJson("", arr), HKS_ERROR_INVALID_ARGUMENT);
+    EXPECT_EQ(ParseAbilityInfoArrayFromJson(R"({"not":"array"})", arr), HKS_ERROR_INVALID_ARGUMENT);
+
+    std::string valid = R"([{"abilityName":"a1","index":"i1","abilityType":0},{"abilityName":"a2","index":"i2"}])";
+    EXPECT_EQ(ParseAbilityInfoArrayFromJson(valid, arr), HKS_SUCCESS);
+    ASSERT_EQ(arr.size(), 2u);
+    EXPECT_EQ(arr[0].abilityName, "a1");
+    EXPECT_EQ(arr[0].index, "i1");
+    EXPECT_EQ(arr[0].abilityType, 0);
+    EXPECT_EQ(arr[1].abilityName, "a2");
+    EXPECT_EQ(arr[1].abilityType, 0);
+
+    std::string badType = R"([{"abilityName":"a1","index":"i1","abilityType":5}])";
+    EXPECT_EQ(ParseAbilityInfoArrayFromJson(badType, arr), HKS_ERROR_INVALID_ARGUMENT);
 }
 }

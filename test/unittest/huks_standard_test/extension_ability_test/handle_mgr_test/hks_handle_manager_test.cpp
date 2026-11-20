@@ -803,6 +803,57 @@ HWTEST_F(HksRemoteHandleManagerTest, GetResourceIdParamValidationTest, TestSize.
     HKS_FREE_BLOB(processInfo.processName);
 }
 
+/**
+ * @tc.name: HksRemoteHandleManagerTest.MergeProviderCertificatesTest
+ * @tc.desc: Cover MergeProviderCertificates branches (invalid/empty/valid cert vec).
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksRemoteHandleManagerTest, MergeProviderCertificatesTest, TestSize.Level0)
+{
+    auto manager = HksRemoteHandleManager::GetInstanceWrapper();
+    ASSERT_NE(manager, nullptr);
+    ProviderInfo providerInfo{"testProvider", "testAbility", "com.test.bundle", 100};
+
+    // invalid JSON (not an array) -> ArraySize negative -> JSON_SERIALIZE_FAILED
+    CommJsonObject combinedInvalid = CommJsonObject::CreateArray();
+    EXPECT_EQ(manager->MergeProviderCertificates(providerInfo, "{not an array", combinedInvalid),
+        HKS_ERROR_JSON_SERIALIZE_FAILED);
+
+    // empty string -> null -> ArraySize negative
+    CommJsonObject combinedEmpty = CommJsonObject::CreateArray();
+    EXPECT_EQ(manager->MergeProviderCertificates(providerInfo, "", combinedEmpty), HKS_ERROR_JSON_SERIALIZE_FAILED);
+
+    // cert with empty index -> continue branch
+    CommJsonObject combinedEmptyIndex = CommJsonObject::CreateArray();
+    EXPECT_EQ(manager->MergeProviderCertificates(providerInfo, R"([{"index":"","cert":"Y2VydA=="}])",
+        combinedEmptyIndex), HKS_SUCCESS);
+
+    // valid cert -> append succeeds
+    CommJsonObject combinedValid = CommJsonObject::CreateArray();
+    EXPECT_EQ(manager->MergeProviderCertificates(providerInfo,
+        R"([{"index":"idx1","cert":"Y2VydA==","purpose":1}])", combinedValid), HKS_SUCCESS);
+    EXPECT_GT(combinedValid.ArraySize(), 0);
+}
+
+/**
+ * @tc.name: HksRemoteHandleManagerTest.ParseAndValidateIndexTest
+ * @tc.desc: Cover ParseAndValidateIndex parse-fail and find-fail branches.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksRemoteHandleManagerTest, ParseAndValidateIndexTest, TestSize.Level0)
+{
+    auto manager = HksRemoteHandleManager::GetInstanceWrapper();
+    ASSERT_NE(manager, nullptr);
+
+    ProviderInfo providerInfo{};
+    std::string handle;
+    // invalid json -> parse fail
+    EXPECT_NE(manager->ParseAndValidateIndex("not_json", 0, providerInfo, handle), HKS_SUCCESS);
+    // valid json but no matching handle -> not exist
+    std::string index = CreateTestIndex();
+    EXPECT_EQ(manager->ParseAndValidateIndex(index, 999999, providerInfo, handle), HKS_ERROR_NOT_EXIST);
+}
+
 } // namespace Huks
 } // namespace Security
 } // namespace OHOS

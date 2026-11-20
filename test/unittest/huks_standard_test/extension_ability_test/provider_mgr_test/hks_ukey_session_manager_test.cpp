@@ -894,6 +894,71 @@ HWTEST_F(HksSessionMgrTest, HksSessionMgrTest028, TestSize.Level0) {
 
     CleanupFullTest(processInfo, wrappedIndex);
 }
+
+/**
+ * @tc.name: HksSessionMgrTest.HksSessionMgrTest029
+ * @tc.desc: ClearSessionMapByHandle - other ret code does not erase handle.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksSessionMgrTest, HksSessionMgrTest029, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    std::string wrappedIndex;
+    uint32_t outHandle = 0;
+    std::shared_ptr<HksMockHapToken> mockToken;
+
+    int32_t ret = SetupFullTest(processInfo, wrappedIndex, outHandle, mockToken);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "SetupFullTest failed";
+
+    auto sessionMgr = HksSessionManager::GetInstanceWrapper();
+    ASSERT_NE(sessionMgr, nullptr);
+
+    // Non-matching ret code takes the early-return branch (no erase).
+    sessionMgr->ClearSessionMapByHandle(HKS_SUCCESS, outHandle);
+
+    std::vector<HksParam> abortParams = {
+        {.tag = HKS_EXT_CRYPTO_TAG_ABILITY_NAME, .blob = StringToBlob(TEST_ABILITY_NAME)},
+    };
+    CppParamSet abortPs(abortParams);
+    struct HksProcessWithErrorInfo processAndError = {&processInfo, nullptr};
+    ret = sessionMgr->ExtensionAbortSession(processAndError, outHandle, abortPs);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "handle should still exist after non-matching clear";
+
+    CleanupFullTest(processInfo, wrappedIndex);
+}
+
+/**
+ * @tc.name: HksSessionMgrTest.HksSessionMgrTest030
+ * @tc.desc: ExtensionInitSession twice - CheckSingleCallerCanInitSession counts existing handle.
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksSessionMgrTest, HksSessionMgrTest030, TestSize.Level0) {
+    HksProcessInfo processInfo{};
+    std::string wrappedIndex;
+    uint32_t outHandle = 0;
+    std::shared_ptr<HksMockHapToken> mockToken;
+
+    int32_t ret = SetupFullTest(processInfo, wrappedIndex, outHandle, mockToken);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "SetupFullTest failed";
+
+    auto sessionMgr = HksSessionManager::GetInstanceWrapper();
+    ASSERT_NE(sessionMgr, nullptr);
+
+    // Second init with the same caller uid exercises the uid-match branch in
+    // CheckSingleCallerCanInitSession.
+    std::vector<HksParam> initParams = {
+        {.tag = HKS_EXT_CRYPTO_TAG_ABILITY_NAME, .blob = StringToBlob(TEST_ABILITY_NAME)},
+        {.tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT},
+        {.tag = HKS_EXT_CRYPTO_TAG_UID, .int32Param = static_cast<int32_t>(processInfo.uidInt)},
+    };
+    CppParamSet initPs(initParams);
+    uint32_t secondHandle = 0;
+    struct HksProcessWithErrorInfo processAndError = {&processInfo, nullptr};
+    ret = sessionMgr->ExtensionInitSession(processAndError, wrappedIndex, initPs, secondHandle);
+    EXPECT_EQ(ret, HKS_SUCCESS) << "second ExtensionInitSession failed";
+    EXPECT_NE(secondHandle, 0u);
+
+    CleanupFullTest(processInfo, wrappedIndex);
+}
 }
 }
 }

@@ -691,4 +691,84 @@ HWTEST_F(HksIpcSerializationTest, HksIpcSerializationTest026, TestSize.Level0)
 
     HKS_FREE_BLOB(responseBlob);
 }
+
+/**
+ * @tc.name: HksIpcSerializationTest.HksIpcSerializationTest027
+ * @tc.desc: tdd HksAllocInBlobWithThreeBlobsAndUint32 null pointer, expect HKS_ERROR_NULL_POINTER
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcSerializationTest, HksIpcSerializationTest027, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcSerializationTest027");
+    struct HksBlob inBlob = { 0, nullptr };
+    struct HksBlob blob1 = { 0, nullptr };
+    struct HksBlob blob2 = { 0, nullptr };
+    struct HksBlob blob3 = { 0, nullptr };
+
+    int32_t ret = HksAllocInBlobWithThreeBlobsAndUint32(nullptr, &blob1, &blob2, &blob3, 0);
+    ASSERT_EQ(ret, HKS_ERROR_NULL_POINTER);
+
+    ret = HksAllocInBlobWithThreeBlobsAndUint32(&inBlob, nullptr, &blob2, &blob3, 0);
+    ASSERT_EQ(ret, HKS_ERROR_NULL_POINTER);
+
+    ret = HksAllocInBlobWithThreeBlobsAndUint32(&inBlob, &blob1, nullptr, &blob3, 0);
+    ASSERT_EQ(ret, HKS_ERROR_NULL_POINTER);
+
+    ret = HksAllocInBlobWithThreeBlobsAndUint32(&inBlob, &blob1, &blob2, nullptr, 0);
+    ASSERT_EQ(ret, HKS_ERROR_NULL_POINTER);
+}
+
+/**
+ * @tc.name: HksIpcSerializationTest.HksIpcSerializationTest028
+ * @tc.desc: tdd HksBlob3AndUint32Pack dest too small for uint32, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcSerializationTest, HksIpcSerializationTest028, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcSerializationTest028");
+    uint8_t b1[1] = { 1 };
+    uint8_t b2[1] = { 2 };
+    uint8_t b3[1] = { 3 };
+    struct HksBlob blob1 = { sizeof(b1), b1 };
+    struct HksBlob blob2 = { sizeof(b2), b2 };
+    struct HksBlob blob3 = { sizeof(b3), b3 };
+
+    const uint32_t destSize = (sizeof(uint32_t) + ALIGN_SIZE(sizeof(b1))) * 3;
+    uint8_t destData[destSize] = { 0 };
+    struct HksBlob destBlob = { destSize, destData };
+
+    int32_t ret = HksBlob3AndUint32Pack(&blob1, &blob2, &blob3, 0, &destBlob);
+    ASSERT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+}
+
+/**
+ * @tc.name: HksIpcSerializationTest.HksIpcSerializationTest029
+ * @tc.desc: tdd HksBlob3AndUint32Unpack src too small for uint32, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcSerializationTest, HksIpcSerializationTest029, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcSerializationTest029");
+    uint8_t b1[1] = { 1 };
+    uint8_t b2[1] = { 2 };
+    uint8_t b3[1] = { 3 };
+    struct HksBlob blob1 = { sizeof(b1), b1 };
+    struct HksBlob blob2 = { sizeof(b2), b2 };
+    struct HksBlob blob3 = { sizeof(b3), b3 };
+
+    struct HksBlob inBlob = { 0, nullptr };
+    int32_t ret = HksAllocInBlobWithThreeBlobs(&inBlob, &blob1, &blob2, &blob3);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBlob3Pack(&blob1, &blob2, &blob3, &inBlob);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob out1 = { 0, nullptr };
+    struct HksBlob out2 = { 0, nullptr };
+    struct HksBlob out3 = { 0, nullptr };
+    uint32_t value = 0;
+    ret = HksBlob3AndUint32Unpack(&inBlob, &out1, &out2, &out3, &value);
+    ASSERT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+
+    HKS_FREE_BLOB(inBlob);
+}
 }

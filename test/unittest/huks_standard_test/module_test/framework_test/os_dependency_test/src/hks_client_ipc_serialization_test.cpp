@@ -1260,4 +1260,138 @@ HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest051, TestSi
 }
 
 #endif
+
+/**
+ * @tc.name: HksClientIpcSerializationTest.HksClientIpcSerializationTest052
+ * @tc.desc: tdd CopyUint32ToBuffer insufficient remaining, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest052, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientIpcSerializationTest052");
+
+    uint32_t offset = 0;
+    const uint32_t destBlobSize = 2;
+    uint8_t destBlobData[destBlobSize] = { 0 };
+    struct HksBlob destBlob = { destBlobSize, destBlobData };
+
+    int32_t ret = CopyUint32ToBuffer(0, &destBlob, &offset);
+    EXPECT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+}
+
+/**
+ * @tc.name: HksClientIpcSerializationTest.HksClientIpcSerializationTest053
+ * @tc.desc: tdd EncodeCertChain outBlob too small, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest053, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientIpcSerializationTest053");
+
+    uint8_t inData[4] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob inBlob = { sizeof(inData), inData };
+    uint8_t outData[4] = { 0 };
+    struct HksBlob outBlob = { sizeof(outData), outData };
+
+    int32_t ret = EncodeCertChain(&inBlob, &outBlob);
+    EXPECT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+}
+
+/**
+ * @tc.name: HksClientIpcSerializationTest.HksClientIpcSerializationTest054
+ * @tc.desc: tdd HksListAliasesUnpackFromService invalid alias blob, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest054, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientIpcSerializationTest054");
+
+    const uint32_t srcSize = 4;
+    uint8_t srcData[srcSize] = { 0 };
+    srcData[0] = 1;
+    struct HksBlob srcBlob = { srcSize, srcData };
+    struct HksKeyAliasSet *destData = nullptr;
+
+    int32_t ret = HksListAliasesUnpackFromService(&srcBlob, &destData);
+    EXPECT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+    EXPECT_EQ(destData, nullptr);
+}
+
+/**
+ * @tc.name: HksClientIpcSerializationTest.HksClientIpcSerializationTest055
+ * @tc.desc: tdd HksCertificateChainUnpackFromService needEncode, expect HKS_ERROR_BUFFER_TOO_SMALL
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest055, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientIpcSerializationTest055");
+
+    const uint32_t srcSize = 64;
+    uint8_t srcData[srcSize] = { 0 };
+    struct HksBlob srcBlob = { srcSize, srcData };
+    uint32_t offset = 0;
+
+    int32_t ret = CopyUint32ToBuffer(1, &srcBlob, &offset);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint8_t certData[4] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob certBlob = { sizeof(certData), certData };
+    ret = CopyBlobToBuffer(&certBlob, &srcBlob, &offset);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    srcBlob.size = offset;
+
+    uint8_t outCertData[4] = { 0 };
+    struct HksBlob outCert = { sizeof(outCertData), outCertData };
+    struct HksCertChain certChain = { &outCert, 1 };
+
+    ret = HksCertificateChainUnpackFromService(&srcBlob, true, &certChain);
+    EXPECT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL);
+}
+
+/**
+ * @tc.name: HksClientIpcSerializationTest.HksClientIpcSerializationTest056
+ * @tc.desc: tdd HksEncapsulateUnpackFromService encapsulatedData too large, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest056, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientIpcSerializationTest056");
+
+    const uint32_t bufSize = 2048;
+    uint8_t bufData[bufSize] = { 0 };
+    struct HksBlob srcBlob = { bufSize, bufData };
+    uint32_t offset = 0;
+    int32_t ret = CopyUint32ToBuffer(HKS_ML_KEM_MAX_CIPHERTEXT_LEN + 1, &srcBlob, &offset);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksEncapsulationResult encapResult = { { 0, nullptr }, { 0, nullptr } };
+    ret = HksEncapsulateUnpackFromService(&srcBlob, &encapResult);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+}
+
+/**
+ * @tc.name: HksClientIpcSerializationTest.HksClientIpcSerializationTest057
+ * @tc.desc: tdd HksEncapsulateUnpackFromService sharedSecret too large, expect HKS_ERROR_INVALID_ARGUMENT
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientIpcSerializationTest, HksClientIpcSerializationTest057, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientIpcSerializationTest057");
+
+    const uint32_t bufSize = 256;
+    uint8_t bufData[bufSize] = { 0 };
+    struct HksBlob srcBlob = { bufSize, bufData };
+    uint32_t offset = 0;
+
+    uint8_t encapData[4] = { 0x01, 0x02, 0x03, 0x04 };
+    struct HksBlob encapBlob = { sizeof(encapData), encapData };
+    int32_t ret = CopyBlobToBuffer(&encapBlob, &srcBlob, &offset);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = CopyUint32ToBuffer(HKS_ML_KEM_SHARED_SECRET_LEN + 1, &srcBlob, &offset);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksEncapsulationResult encapResult = { { 0, nullptr }, { 0, nullptr } };
+    ret = HksEncapsulateUnpackFromService(&srcBlob, &encapResult);
+    EXPECT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT);
+}
 }

@@ -676,4 +676,606 @@ HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest017, TestSize.Level0)
     HksFreeParamSet(&paramSetIn);
 }
 
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest018
+ * @tc.desc: tdd HksCheckOptionalParam derive/mac purpose and invalid tag
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest018, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest018");
+    struct HksParam param = { 0 };
+    // DERIVE + RSA (not in allow list) -> INVALID_PURPOSE
+    ASSERT_EQ(HksCheckOptionalParam(HKS_TAG_BLOCK_MODE, HKS_ALG_RSA, HKS_KEY_PURPOSE_DERIVE, false, &param),
+        HKS_ERROR_INVALID_PURPOSE);
+    // MAC + ECC (not in allow list) -> INVALID_PURPOSE
+    ASSERT_EQ(HksCheckOptionalParam(HKS_TAG_DIGEST, HKS_ALG_ECC, HKS_KEY_PURPOSE_MAC, false, &param),
+        HKS_ERROR_INVALID_PURPOSE);
+    // invalid tag -> HKS_FAILURE
+    ASSERT_EQ(HksCheckOptionalParam(9999, HKS_ALG_AES, HKS_KEY_PURPOSE_ENCRYPT, false, &param), HKS_FAILURE);
+    // DERIVE + AES (allowed) -> not INVALID_PURPOSE
+    ASSERT_NE(HksCheckOptionalParam(HKS_TAG_BLOCK_MODE, HKS_ALG_AES, HKS_KEY_PURPOSE_DERIVE, false, &param),
+        HKS_ERROR_INVALID_PURPOSE);
+    // MAC + HMAC (allowed) -> not INVALID_PURPOSE
+    ASSERT_NE(HksCheckOptionalParam(HKS_TAG_DIGEST, HKS_ALG_HMAC, HKS_KEY_PURPOSE_MAC, false, &param),
+        HKS_ERROR_INVALID_PURPOSE);
+    // DERIVE + 3DES (allowed) -> not INVALID_PURPOSE
+    ASSERT_NE(HksCheckOptionalParam(HKS_TAG_PADDING, HKS_ALG_3DES, HKS_KEY_PURPOSE_DERIVE, false, &param),
+        HKS_ERROR_INVALID_PURPOSE);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest019
+ * @tc.desc: tdd HksCheckOptionalParam with absent optional param
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest019, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest019");
+    struct HksParam param = { 0 };
+    // absent optional param (padding) for AES encrypt -> success or get-fail, but not failure
+    int32_t ret = HksCheckOptionalParam(HKS_TAG_PADDING, HKS_ALG_AES, HKS_KEY_PURPOSE_ENCRYPT, true, &param);
+    ASSERT_NE(ret, HKS_FAILURE);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest020
+ * @tc.desc: tdd CheckCurve25519KeyLen branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest020, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest020");
+    ParamsValues values = {
+        {.needCheck = true, .value = HKS_CURVE25519_KEY_SIZE_256, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+
+    /* key blob too small */
+    uint8_t small[4] = {0};
+    HksBlob smallKey = { .size = sizeof(small), .data = small };
+    int32_t ret = CheckCurve25519KeyLen(HKS_ALG_X25519, HKS_KEY_TYPE_PRIVATE_KEY, &values, &smallKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "020 small size failed, ret = " << ret;
+
+    /* keyAlg/keySize mismatch */
+    struct HksKeyMaterial25519 mat = {
+        .keyAlg = HKS_ALG_RSA, .keySize = HKS_CURVE25519_KEY_SIZE_256,
+        .pubKeySize = 0, .priKeySize = HKS_KEY_BYTES(HKS_CURVE25519_KEY_SIZE_256), .reserved = 0,
+    };
+    HksBlob key = { .size = sizeof(mat), .data = reinterpret_cast<uint8_t *>(&mat) };
+    ret = CheckCurve25519KeyLen(HKS_ALG_X25519, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "020 keyAlg mismatch failed, ret = " << ret;
+
+    /* pubKeySize > 256 */
+    mat.keyAlg = HKS_ALG_X25519;
+    mat.pubKeySize = HKS_CURVE25519_KEY_SIZE_256 + 1;
+    ret = CheckCurve25519KeyLen(HKS_ALG_X25519, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "020 pubKey size failed, ret = " << ret;
+
+    /* priKeySize == 0 */
+    mat.pubKeySize = 0;
+    mat.priKeySize = 0;
+    ret = CheckCurve25519KeyLen(HKS_ALG_X25519, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "020 priKey zero failed, ret = " << ret;
+
+    /* key->size < keySize */
+    mat.priKeySize = HKS_KEY_BYTES(HKS_CURVE25519_KEY_SIZE_256);
+    HksBlob truncatedKey = { .size = sizeof(mat), .data = reinterpret_cast<uint8_t *>(&mat) };
+    ret = CheckCurve25519KeyLen(HKS_ALG_X25519, HKS_KEY_TYPE_PRIVATE_KEY, &values, &truncatedKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "020 truncated failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest021
+ * @tc.desc: tdd CheckDHKeyLen branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest021, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest021");
+    ParamsValues values = {
+        {.needCheck = true, .value = HKS_DH_KEY_SIZE_4096, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+
+    /* key blob too small */
+    uint8_t small[4] = {0};
+    HksBlob smallKey = { .size = sizeof(small), .data = small };
+    int32_t ret = CheckDHKeyLen(HKS_ALG_DH, HKS_KEY_TYPE_PRIVATE_KEY, &values, &smallKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "021 small size failed, ret = " << ret;
+
+    /* keyAlg/keySize mismatch */
+    struct HksKeyMaterialDh mat = {
+        .keyAlg = HKS_ALG_RSA, .keySize = HKS_DH_KEY_SIZE_4096,
+        .pubKeySize = 0, .priKeySize = HKS_KEY_BYTES(HKS_DH_KEY_SIZE_4096), .reserved = 0,
+    };
+    HksBlob key = { .size = sizeof(mat), .data = reinterpret_cast<uint8_t *>(&mat) };
+    ret = CheckDHKeyLen(HKS_ALG_DH, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "021 keyAlg mismatch failed, ret = " << ret;
+
+    /* pubKeySize > 4096 */
+    mat.keyAlg = HKS_ALG_DH;
+    mat.pubKeySize = HKS_DH_KEY_SIZE_4096 + 1;
+    ret = CheckDHKeyLen(HKS_ALG_DH, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "021 pubKey size failed, ret = " << ret;
+
+    /* priKeySize == 0 */
+    mat.pubKeySize = 0;
+    mat.priKeySize = 0;
+    ret = CheckDHKeyLen(HKS_ALG_DH, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "021 priKey zero failed, ret = " << ret;
+
+    /* key->size < keySize */
+    mat.priKeySize = HKS_KEY_BYTES(HKS_DH_KEY_SIZE_4096);
+    HksBlob truncatedKey = { .size = sizeof(mat), .data = reinterpret_cast<uint8_t *>(&mat) };
+    ret = CheckDHKeyLen(HKS_ALG_DH, HKS_KEY_TYPE_PRIVATE_KEY, &values, &truncatedKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "021 truncated failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest022
+ * @tc.desc: tdd CheckEccKeyLen small size and zero zSize
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest022, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest022");
+    ParamsValues values = {
+        {.needCheck = true, .value = HKS_ECC_KEY_SIZE_521, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+
+    /* key blob too small */
+    uint8_t small[4] = {0};
+    HksBlob smallKey = { .size = sizeof(small), .data = small };
+    int32_t ret = CheckEccKeyLen(HKS_ALG_ECC, HKS_KEY_TYPE_PRIVATE_KEY, &values, &smallKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "022 small size failed, ret = " << ret;
+
+    /* zSize == 0 */
+    struct HksKeyMaterialEcc mat = {
+        .keyAlg = HKS_ALG_ECC, .keySize = HKS_ECC_KEY_SIZE_521,
+        .xSize = HKS_ECC_KEY_SIZE_521, .ySize = HKS_ECC_KEY_SIZE_521, .zSize = 0,
+    };
+    HksBlob key = { .size = sizeof(mat), .data = reinterpret_cast<uint8_t *>(&mat) };
+    ret = CheckEccKeyLen(HKS_ALG_ECC, HKS_KEY_TYPE_PRIVATE_KEY, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "022 zero zSize failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest023
+ * @tc.desc: tdd CheckDsaKeyLen small size
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest023, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest023");
+    ParamsValues values = {
+        {.needCheck = true, .value = DEFAULT_VALUE, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+    uint8_t small[4] = {0};
+    HksBlob smallKey = { .size = sizeof(small), .data = small };
+    int32_t ret = CheckDsaKeyLen(HKS_ALG_DSA, HKS_KEY_TYPE_PRIVATE_KEY, &values, &smallKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "023 small size failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest024
+ * @tc.desc: tdd CheckKeyLen switch dispatch and default
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest024, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest024");
+    ParamsValues values = {
+        {.needCheck = true, .value = HKS_CURVE25519_KEY_SIZE_256, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+
+    uint8_t small[4] = {0};
+    HksBlob smallKey = { .size = sizeof(small), .data = small };
+
+    /* dispatch to CheckCurve25519KeyLen (returns INVALID_KEY_INFO for small blob) */
+    int32_t ret = CheckKeyLen(HKS_ALG_X25519, HKS_KEY_TYPE_PRIVATE_KEY, &values, &smallKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "024 dispatch failed, ret = " << ret;
+
+    /* default -> INVALID_ALGORITHM */
+    ret = CheckKeyLen(0, HKS_KEY_TYPE_PRIVATE_KEY, &values, &smallKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ALGORITHM) << "024 default failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest025
+ * @tc.desc: tdd CheckImportKeySize keyAlg mismatch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest025, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest025");
+    ParamsValues values = {
+        {.needCheck = true, .value = DEFAULT_VALUE, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+    struct HksPubKeyInfo info = {
+        .keyAlg = HKS_ALG_RSA, .keySize = DEFAULT_VALUE,
+        .nOrXSize = 0, .eOrYSize = 0, .placeHolder = 0,
+    };
+    HksBlob key = { .size = sizeof(info), .data = reinterpret_cast<uint8_t *>(&info) };
+    int32_t ret = CheckImportKeySize(HKS_ALG_ECC, &values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "025 keyAlg mismatch failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest026
+ * @tc.desc: tdd CheckImportSymmetricKeySize size mismatch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest026, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest026");
+    ParamsValues values = {
+        {.needCheck = true, .value = HKS_AES_KEY_SIZE_128, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+    HksBlob key = { .size = 0, .data = nullptr };
+    int32_t ret = CheckImportSymmetricKeySize(&values, &key);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "026 symmetric size failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest027
+ * @tc.desc: tdd CheckGenKeyMacDeriveParams invalid alg
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest027, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest027");
+    ParamsValues params;
+    (void)memset_s(&params, sizeof(params), 0, sizeof(params));
+    int32_t ret = CheckGenKeyMacDeriveParams(HKS_ALG_RSA, HKS_KEY_PURPOSE_MAC, nullptr, &params, 0);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_PURPOSE) << "027 invalid alg failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest028
+ * @tc.desc: tdd CheckPbkdf2DeriveKeyParams iteration and salt
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest028, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest028");
+
+    /* iteration too small */
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam iteration = { .tag = HKS_TAG_ITERATION, .uint32Param = 1 };
+    ret = HksAddParams(paramSet, &iteration, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = CheckPbkdf2DeriveKeyParams(paramSet);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ITERATION) << "028 iteration failed, ret = " << ret;
+    HksFreeParamSet(&paramSet);
+
+    /* salt blob too small */
+    struct HksParamSet *paramSet2 = nullptr;
+    ret = HksInitParamSet(&paramSet2);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam iteration2 = { .tag = HKS_TAG_ITERATION, .uint32Param = 1000 };
+    ret = HksAddParams(paramSet2, &iteration2, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    uint8_t saltBuf[4] = {0};
+    struct HksParam salt = {0};
+    salt.tag = HKS_TAG_SALT;
+    salt.blob.size = sizeof(saltBuf);
+    salt.blob.data = saltBuf;
+    ret = HksAddParams(paramSet2, &salt, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet2);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = CheckPbkdf2DeriveKeyParams(paramSet2);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_SALT) << "028 salt failed, ret = " << ret;
+    HksFreeParamSet(&paramSet2);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest029
+ * @tc.desc: tdd RsaCheckKeySize flex key size
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest029, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest029");
+    /* flexible key size divisible by HKS_RSA_KEYSIZE_CNT in [1024, 2048] */
+    int32_t ret = RsaCheckKeySize(1040);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "029 flex success failed, ret = " << ret;
+
+    /* not divisible and not a supported size */
+    ret = RsaCheckKeySize(1025);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_SIZE) << "029 invalid key size failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest030
+ * @tc.desc: tdd CheckAesAeCipherData branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest030, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest030");
+    struct HksBlob outData = { .size = 0, .data = nullptr };
+
+    /* encrypt with overflow inSize */
+    struct HksBlob bigIn = { .size = UINT32_MAX, .data = nullptr };
+    int32_t ret = CheckAesAeCipherData(HKS_CMD_ID_ENCRYPT, &bigIn, &outData, HKS_AE_TAG_LEN);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "030 encrypt overflow failed, ret = " << ret;
+
+    /* encrypt with out buffer too small */
+    struct HksBlob normalIn = { .size = 16, .data = nullptr };
+    ret = CheckAesAeCipherData(HKS_CMD_ID_ENCRYPT, &normalIn, &outData, HKS_AE_TAG_LEN);
+    ASSERT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL) << "030 encrypt buf failed, ret = " << ret;
+
+    /* decrypt with inSize smaller than tag len */
+    struct HksBlob tinyIn = { .size = 4, .data = nullptr };
+    ret = CheckAesAeCipherData(HKS_CMD_ID_DECRYPT, &tinyIn, &outData, HKS_AE_TAG_LEN);
+    ASSERT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL) << "030 decrypt buf failed, ret = " << ret;
+
+    /* unsupported cmd id */
+    ret = CheckAesAeCipherData(0, &normalIn, &outData, HKS_AE_TAG_LEN);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "030 default cmd failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest031
+ * @tc.desc: tdd IsValidCcmTagLen and IsValidGcmTagLen
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest031, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest031");
+    int32_t ret = IsValidCcmTagLen(4);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "031 ccm valid failed, ret = " << ret;
+    ret = IsValidCcmTagLen(5);
+    ASSERT_EQ(ret, HKS_ERROR_CODE_AEAD_TAG_LEN_INVALID) << "031 ccm invalid failed, ret = " << ret;
+
+    ret = IsValidGcmTagLen(16);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "031 gcm valid failed, ret = " << ret;
+    ret = IsValidGcmTagLen(12);
+    ASSERT_EQ(ret, HKS_ERROR_CODE_AEAD_TAG_LEN_INVALID) << "031 gcm invalid failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest032
+ * @tc.desc: tdd CheckMacPurpose and CheckMacOutput branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest032, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest032");
+
+    /* purpose != MAC */
+    struct HksParamSet *purposeSet = nullptr;
+    int32_t ret = HksInitParamSet(&purposeSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam purposeParam = { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT };
+    ret = HksAddParams(purposeSet, &purposeParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&purposeSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = CheckMacPurpose(purposeSet);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_PURPOSE) << "032 purpose failed, ret = " << ret;
+    HksFreeParamSet(&purposeSet);
+
+    /* mac buffer too small */
+    struct HksParamSet *digestSet = nullptr;
+    ret = HksInitParamSet(&digestSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam digestParam = { .tag = HKS_TAG_DIGEST, .uint32Param = HKS_DIGEST_SHA256 };
+    ret = HksAddParams(digestSet, &digestParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&digestSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint8_t keyBuf[4] = {0};
+    struct HksBlob key = { .size = sizeof(keyBuf), .data = keyBuf };
+    struct HksBlob mac = { .size = 0, .data = nullptr };
+    ret = CheckMacOutput(&key, digestSet, &mac, false);
+    ASSERT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL) << "032 mac buf failed, ret = " << ret;
+
+    /* local check with key too small */
+    uint8_t macBuf[HKS_DIGEST_SHA256_LEN] = {0};
+    struct HksBlob macOk = { .size = sizeof(macBuf), .data = macBuf };
+    struct HksBlob smallKey = { 0, nullptr };
+    ret = CheckMacOutput(&smallKey, digestSet, &macOk, true);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_SIZE) << "032 key size failed, ret = " << ret;
+    HksFreeParamSet(&digestSet);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest033
+ * @tc.desc: tdd CheckMutableParams ml-dsa and ml-kem
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest033, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest033");
+    struct ParamsValues params;
+    (void)memset_s(&params, sizeof(params), 0, sizeof(params));
+
+    params.purpose.value = HKS_KEY_PURPOSE_ENCRYPT;
+    int32_t ret = CheckMutableParams(HKS_ALG_ML_DSA, HKS_KEY_TYPE_PRIVATE_KEY, &params);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_PURPOSE) << "033 ml-dsa invalid failed, ret = " << ret;
+
+    params.purpose.value = HKS_KEY_PURPOSE_SIGN;
+    ret = CheckMutableParams(HKS_ALG_ML_DSA, HKS_KEY_TYPE_PRIVATE_KEY, &params);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "033 ml-dsa success failed, ret = " << ret;
+
+    params.purpose.value = HKS_KEY_PURPOSE_ENCRYPT;
+    ret = CheckMutableParams(HKS_ALG_ML_KEM, HKS_KEY_TYPE_PRIVATE_KEY, &params);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_PURPOSE) << "033 ml-kem invalid failed, ret = " << ret;
+
+    params.purpose.value = HKS_KEY_PURPOSE_UNWRAP;
+    ret = CheckMutableParams(HKS_ALG_ML_KEM, HKS_KEY_TYPE_PRIVATE_KEY, &params);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "033 ml-kem success failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest034
+ * @tc.desc: tdd HksCoreCheckAgreeKeyParams local check branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest034, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest034");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam algParam = { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_ECDH };
+    ret = HksAddParams(paramSet, &algParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    /* private key blob too small to hold header */
+    struct HksBlob priv = { .size = 0, .data = nullptr };
+    struct HksBlob peer = { .size = 0, .data = nullptr };
+    struct HksBlob agreed = { .size = 0, .data = nullptr };
+    ret = HksCoreCheckAgreeKeyParams(paramSet, &priv, &peer, &agreed, true);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "034 header too small failed, ret = " << ret;
+
+    /* agreed key buffer too small */
+    struct HksKeyMaterialHeader header = { .keyAlg = HKS_ALG_ECDH, .keySize = 2048 };
+    struct HksBlob privOk = { .size = sizeof(header), .data = reinterpret_cast<uint8_t *>(&header) };
+    ret = HksCoreCheckAgreeKeyParams(paramSet, &privOk, &peer, &agreed, true);
+    ASSERT_EQ(ret, HKS_ERROR_BUFFER_TOO_SMALL) << "034 agreed buf failed, ret = " << ret;
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest035
+ * @tc.desc: tdd HksCoreCheckDeriveKeyParams invalid purpose
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest035, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest035");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam algParam = { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_HKDF };
+    struct HksParam purposeParam = { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_ENCRYPT };
+    struct HksParam params[] = { algParam, purposeParam };
+    ret = HksAddParams(paramSet, params, 2);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob mainKey = { .size = 0, .data = nullptr };
+    struct HksBlob derivedKey = { .size = 0, .data = nullptr };
+    ret = HksCoreCheckDeriveKeyParams(paramSet, &mainKey, &derivedKey, false);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_PURPOSE) << "035 invalid purpose failed, ret = " << ret;
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest036
+ * @tc.desc: tdd HksCoreCheckAgreeDeriveFinishParams non-symmetric alg
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest036, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest036");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam keySizeParam = { .tag = HKS_TAG_KEY_SIZE, .uint32Param = HKS_AES_KEY_SIZE_128 };
+    struct HksParam algParam = { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_RSA };
+    struct HksParam params[] = { keySizeParam, algParam };
+    ret = HksAddParams(paramSet, params, 2);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    uint8_t keyBuf[HKS_KEY_BYTES(HKS_AES_KEY_SIZE_128)] = {0};
+    struct HksBlob key = { .size = sizeof(keyBuf), .data = keyBuf };
+    ret = HksCoreCheckAgreeDeriveFinishParams(&key, paramSet);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_ARGUMENT) << "036 non-symmetric failed, ret = " << ret;
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest037
+ * @tc.desc: tdd HksLocalCheckCipherParams aes invalid key size
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest037, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest037");
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksParam algParam = { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_AES };
+    ret = HksAddParams(paramSet, &algParam, 1);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+
+    struct HksBlob inData = { .size = 0, .data = nullptr };
+    struct HksBlob outData = { .size = 0, .data = nullptr };
+    ret = HksLocalCheckCipherParams(HKS_CMD_ID_ENCRYPT, 0, paramSet, &inData, &outData);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_SIZE) << "037 aes key size failed, ret = " << ret;
+
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest038
+ * @tc.desc: tdd CheckAsyKeyMaterialSize invalid blob and default alg
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest038, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest038");
+
+    /* invalid keyIn blob */
+    struct HksBlob invalidBlob = { .size = 0, .data = nullptr };
+    int32_t ret = CheckAsyKeyMaterialSize(HKS_ALG_RSA, &invalidBlob, nullptr);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "038 invalid blob failed, ret = " << ret;
+
+    /* symmetric/unknown alg skips material validation */
+    uint8_t buf[4] = {0};
+    struct HksBlob validBlob = { .size = sizeof(buf), .data = buf };
+    ret = CheckAsyKeyMaterialSize(HKS_ALG_AES, &validBlob, nullptr);
+    ASSERT_EQ(ret, HKS_SUCCESS) << "038 default alg failed, ret = " << ret;
+}
+
+/**
+ * @tc.name: HksCheckParamsetTest.HksCheckParamsetTest039
+ * @tc.desc: tdd CheckMlKemKeyLen truncated key blob
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksCheckParamsetTest, HksCheckParamsetTest039, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksCheckParamsetTest039");
+    ParamsValues mlkemValues = {
+        {.needCheck = true, .value = HKS_ML_KEM_KEY_PARAM_SET_768, .isAbsent = false},
+        {0}, {0}, {0}, {0},
+    };
+    struct HksKeyMaterialMlKem mlkemMat = {
+        .keyAlg = HKS_ALG_ML_KEM, .keyParamSet = HKS_ML_KEM_KEY_PARAM_SET_768,
+        .pubKeySize = 0, .priKeySize = HKS_ML_KEM_PRI_KEY_SIZE_2400, .reserved = 0,
+    };
+    HksBlob truncatedKey = { .size = sizeof(mlkemMat), .data = reinterpret_cast<uint8_t *>(&mlkemMat) };
+    int32_t ret = CheckMlKemKeyLen(HKS_ALG_ML_KEM, HKS_KEY_TYPE_PRIVATE_KEY, &mlkemValues, &truncatedKey);
+    ASSERT_EQ(ret, HKS_ERROR_INVALID_KEY_INFO) << "039 ml-kem truncated failed, ret = " << ret;
+}
+
 }
