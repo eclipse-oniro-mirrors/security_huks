@@ -43,6 +43,18 @@ int32_t HksCoreCheckCipherParams(uint32_t cmdId, const struct HksBlob *key, cons
 int32_t HksCoreCheckAgreeKeyParams(const struct HksParamSet *paramSet, const struct HksBlob *privateKey,
     const struct HksBlob *peerPublicKey, const struct HksBlob *agreedKey, bool isLocalCheck);
 
+/*
+ * Reads and validates HKS_TAG_PQC_SIG_MODE. mode defaults to HKS_PQC_SIG_MODE_PURE when the tag
+ * is absent, so that keys and requests created before the mode was introduced keep working.
+ */
+int32_t HksCheckPqcSigModeParam(const struct HksParamSet *paramSet, uint32_t *mode);
+
+/*
+ * Checks the ML-DSA specific sign/verify parameters (pre-hash mode and external mu mode).
+ * message may be NULL when the data is not available yet (for example at session init).
+ */
+int32_t HksCheckMlDsaSignVerifyParam(const struct HksParamSet *paramSet, const struct HksBlob *message);
+
 int32_t HksLocalCheckSignVerifyParams(uint32_t cmdId, uint32_t keySize, const struct HksParamSet *paramSet,
     const struct HksBlob *srcData, const struct HksBlob *signature);
 

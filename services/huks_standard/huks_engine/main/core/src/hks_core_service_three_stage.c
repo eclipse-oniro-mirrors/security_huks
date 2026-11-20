@@ -56,7 +56,6 @@
 #define MAX_BUF_SIZE                     (5 * 1024 * 1024)
 #define HKS_AES_GCM_NONCE_LEN            12
 #define HKS_AES_CCM_NONCE_LEN            7
-#define HKS_ML_DSA_CONTEXT_MAX_SIZE      255
 #define HKS_ML_DSA_MESSAGE_MAX_SIZE      102400
 #define HKS_RSA_PKCS_NUM                 11
 
@@ -574,24 +573,31 @@ static int32_t CheckSignVerifyParams(const struct HuksKeyNode *keyNode, const st
     return ret;
 }
 
-static int32_t HksFillUsageSpecWithContext(const struct HksParamSet *paramset, struct HksUsageSpec *usageSpec)
+static int32_t PrepareMlDsaSignVerify(const struct HuksKeyNode *keyNode, const struct HksBlob *inData,
+    struct HksUsageSpec *usageSpec, struct HksBlob *context)
 {
-    struct HksParam *ctxParam = NULL;
-    int32_t ret = HksGetParam(paramset, HKS_TAG_CONTEXT, &ctxParam);
-    if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+    if (usageSpec->algType != HKS_ALG_ML_DSA) {
         return HKS_SUCCESS;
-    } else if (ret != HKS_SUCCESS) {
-        HKS_LOG_E("get context from keyNode runtimeParamSet failed, ret = %d", ret);
-        return ret;
     }
+    int32_t ret = HksCheckMlDsaSignVerifyParam(keyNode->runtimeParamSet, inData);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check ml-dsa sign or verify params fail");
+    return HksFillMlDsaContext(keyNode->runtimeParamSet, usageSpec, context);
+}
 
-    if (ctxParam->blob.size > HKS_ML_DSA_CONTEXT_MAX_SIZE) {
-        HKS_LOG_E("invalid ml-dsa context size");
-        return HKS_ERROR_INVALID_ARGUMENT;
+static int32_t CallSignVerifyHal(const struct HksBlob *rawKey, const struct HksUsageSpec *usageSpec,
+    const struct HksBlob *inData, struct HksBlob *outData)
+{
+    bool isSign = (usageSpec->purpose == HKS_KEY_PURPOSE_SIGN);
+    if ((usageSpec->algType == HKS_ALG_RSA) && (usageSpec->padding == HKS_PADDING_ISO_IEC_9796_2)) {
+#ifdef HKS_SUPPORT_RSA_ISO_IEC_9796_2
+        return isSign ? HksCryptoHalSignIsoIec97962(rawKey, usageSpec, inData, outData) :
+            HksCryptoHalVerifyIsoIec97962(rawKey, usageSpec, inData, outData);
+#else
+        return HKS_ERROR_NOT_SUPPORTED;
+#endif
     }
-
-    usageSpec->algParam = (void *)&ctxParam->blob;
-    return HKS_SUCCESS;
+    return isSign ? HksCryptoHalSign(rawKey, usageSpec, inData, outData) :
+        HksCryptoHalVerify(rawKey, usageSpec, inData, outData);
 }
 
 static int32_t CoreSignVerify(const struct HuksKeyNode *keyNode, const struct HksBlob *inData,
@@ -611,32 +617,9 @@ static int32_t CoreSignVerify(const struct HuksKeyNode *keyNode, const struct Hk
     struct HksBlob context = { 0, NULL };
     usageSpec.algParam = (void *)&context;
 
-    if ((usageSpec.algType == HKS_ALG_RSA) && (usageSpec.padding == HKS_PADDING_ISO_IEC_9796_2)) {
-#ifdef HKS_SUPPORT_RSA_ISO_IEC_9796_2
-        if (usageSpec.purpose == HKS_KEY_PURPOSE_SIGN) {
-            ret = HksCryptoHalSignIsoIec97962(&rawKey, &usageSpec, inData, outData);
-        } else {
-            ret = HksCryptoHalVerifyIsoIec97962(&rawKey, &usageSpec, inData, outData);
-        }
-#else
-        ret = HKS_ERROR_NOT_SUPPORTED;
-#endif
-    } else {
-        if (usageSpec.algType == HKS_ALG_ML_DSA) {
-            ret = HksFillUsageSpecWithContext(keyNode->runtimeParamSet, &usageSpec);
-            if (ret != HKS_SUCCESS) {
-                HKS_LOG_E("fill ml-dsa context fail");
-                (void)memset_s(rawKey.data, rawKey.size, 0, rawKey.size);
-                HKS_FREE(rawKey.data);
-                return ret;
-            }
-        }
-
-        if (usageSpec.purpose == HKS_KEY_PURPOSE_SIGN) {
-            ret = HksCryptoHalSign(&rawKey, &usageSpec, inData, outData);
-        } else {
-            ret = HksCryptoHalVerify(&rawKey, &usageSpec, inData, outData);
-        }
+    ret = PrepareMlDsaSignVerify(keyNode, inData, &usageSpec, &context);
+    if (ret == HKS_SUCCESS) {
+        ret = CallSignVerifyHal(&rawKey, &usageSpec, inData, outData);
     }
 
     HKS_IF_NOT_SUCC_LOGE(ret, "SignVerify Finish failed, purpose = 0x%" LOG_PUBLIC "x, ret = %" LOG_PUBLIC "d",
@@ -1606,6 +1589,15 @@ int32_t HksCoreSignVerifyThreeStageInit(const struct HuksKeyNode *keyNode, const
     ret = HksGetParam(keyNode->runtimeParamSet, HKS_TAG_ALGORITHM, &algParam);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_CHECK_GET_ALG_FAIL,
         "get param get 0x%" LOG_PUBLIC "x failed", HKS_TAG_ALGORITHM)
+
+    if (algParam->uint32Param == HKS_ALG_ML_DSA) {
+        ret = HksCheckMlDsaSignVerifyParam(keyNode->runtimeParamSet, NULL);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check ml-dsa sign or verify params fail")
+
+        /* the pqc signature mode is bound to the key, see HKS_TAG_PQC_SIG_MODE */
+        ret = HksCheckPqcSigModeMatch(keyNode->keyBlobParamSet, keyNode->runtimeParamSet);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check pqc sig mode match key fail")
+    }
 
     uint32_t digest = alg;  // In signature or verify scenario, alg represents digest. See code {GetPurposeAndAlgorithm}
 

@@ -577,6 +577,12 @@ static int32_t CoreCheckGenKeyParams(const struct HksParamSet *paramSet, struct 
     ret = CheckAndGetAlgorithm(paramSet, g_genKeyAlg, HKS_ARRAY_SIZE(g_genKeyAlg), &alg);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check and get alg failed")
 
+    if (alg == HKS_ALG_ML_DSA) {
+        uint32_t pqcSigMode = HKS_PQC_SIG_MODE_PURE;
+        ret = HksCheckPqcSigModeParam(paramSet, &pqcSigMode);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check pqc sig mode failed")
+    }
+
     struct HksParam *purposeParam = NULL;
     struct HksParam *batchPurposeParam = NULL;
     ret = HksGetParam(paramSet, HKS_TAG_PURPOSE, &purposeParam);
@@ -1373,14 +1379,85 @@ int32_t HksCoreCheckImportWrappedKeyParams(const struct HksBlob *key, const stru
     return HKS_SUCCESS;
 }
 
+int32_t HksCheckPqcSigModeParam(const struct HksParamSet *paramSet, uint32_t *mode)
+{
+    HKS_IF_NULL_LOGE_RETURN(paramSet, HKS_ERROR_NULL_POINTER, "paramSet is null")
+    HKS_IF_NULL_LOGE_RETURN(mode, HKS_ERROR_NULL_POINTER, "mode is null")
+
+    *mode = HKS_PQC_SIG_MODE_PURE;
+    struct HksParam *param = NULL;
+    int32_t ret = HksGetParam(paramSet, HKS_TAG_PQC_SIG_MODE, &param);
+    if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+        return HKS_SUCCESS;
+    }
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INVALID_ARGUMENT, "get pqc sig mode param failed")
+
+    HKS_IF_TRUE_LOGE_RETURN((param->uint32Param != HKS_PQC_SIG_MODE_PURE) &&
+        (param->uint32Param != HKS_PQC_SIG_MODE_PREHASH) &&
+        (param->uint32Param != HKS_PQC_SIG_MODE_EXTERNAL_MU), HKS_ERROR_INVALID_MODE,
+        "invalid pqc sig mode %" LOG_PUBLIC "u", param->uint32Param)
+
+    *mode = param->uint32Param;
+    return HKS_SUCCESS;
+}
+
+int32_t HksCheckMlDsaSignVerifyParam(const struct HksParamSet *paramSet, const struct HksBlob *message)
+{
+    uint32_t mode = HKS_PQC_SIG_MODE_PURE;
+    int32_t ret = HksCheckPqcSigModeParam(paramSet, &mode);
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check pqc sig mode failed")
+
+    struct HksParam *param = NULL;
+    if (mode == HKS_PQC_SIG_MODE_PREHASH) {
+        /* the pre-hash mode takes the message digest, the hash function can not be inferred from its length */
+        ret = HksGetParam(paramSet, HKS_TAG_DIGEST, &param);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INVALID_DIGEST,
+            "ml-dsa prehash mode requires a digest param")
+        uint32_t digestLen = 0;
+        HKS_IF_NOT_SUCC_LOGE_RETURN(HksGetDigestLen(param->uint32Param, &digestLen), HKS_ERROR_INVALID_DIGEST,
+            "unsupported pqc prehash digest %" LOG_PUBLIC "u", param->uint32Param)
+        HKS_IF_TRUE_LOGE_RETURN(!HksIsSupportedPqcPreHashDigest(param->uint32Param), HKS_ERROR_INVALID_DIGEST,
+            "pqc prehash digest %" LOG_PUBLIC "u is not supported", param->uint32Param)
+        if (message != NULL) {
+            HKS_IF_TRUE_LOGE_RETURN((message->data == NULL) || (message->size != digestLen),
+                HKS_ERROR_INVALID_ARGUMENT, "invalid pqc prehash size %" LOG_PUBLIC "u, expect %" LOG_PUBLIC "u",
+                message->size, digestLen)
+        }
+    }
+
+    if (mode == HKS_PQC_SIG_MODE_EXTERNAL_MU) {
+        if (message != NULL) {
+            HKS_IF_TRUE_LOGE_RETURN((message->data == NULL) || (message->size != ML_DSA_MU_SIZE),
+                HKS_ERROR_INVALID_ARGUMENT, "invalid external mu size %" LOG_PUBLIC "u, expect %" LOG_PUBLIC "u",
+                message->size, ML_DSA_MU_SIZE)
+        }
+        /* mu already contains the context string, it is ignored in external mu mode */
+        return HKS_SUCCESS;
+    }
+
+    ret = HksGetParam(paramSet, HKS_TAG_CONTEXT, &param);
+    if (ret == HKS_SUCCESS) {
+        HKS_IF_TRUE_LOGE_RETURN(param->blob.size > HKS_ML_DSA_MAX_CONTEXT_SIZE, HKS_ERROR_INVALID_ARGUMENT,
+            "ml-dsa context size %" LOG_PUBLIC "u is too long", param->blob.size)
+    } else if (ret != HKS_ERROR_PARAM_NOT_EXIST) {
+        HKS_LOG_E("get ml-dsa context param failed, ret = %" LOG_PUBLIC "d", ret);
+        return HKS_ERROR_INVALID_ARGUMENT;
+    }
+    return HKS_SUCCESS;
+}
+
 int32_t HksCoreCheckSignVerifyParams(uint32_t cmdId, const struct HksBlob *key, const struct HksParamSet *paramSet,
     const struct HksBlob *srcData, const struct HksBlob *signature)
 {
 #ifdef HKS_SUPPORT_API_SIGN_VERIFY
-    (void)srcData;
     uint32_t alg;
     int32_t ret = CheckAndGetAlgorithm(paramSet, g_signAlg, HKS_ARRAY_SIZE(g_signAlg), &alg);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check and get alg failed")
+
+    if (alg == HKS_ALG_ML_DSA) {
+        ret = HksCheckMlDsaSignVerifyParam(paramSet, srcData);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "check ml-dsa sign or verify params failed")
+    }
 
     struct ParamsValues params;
     (void)memset_s(&params, sizeof(params), 0, sizeof(params));
@@ -1413,10 +1490,14 @@ int32_t HksLocalCheckSignVerifyParams(uint32_t cmdId, uint32_t keySize, const st
     const struct HksBlob *srcData, const struct HksBlob *signature)
 {
 #ifdef HKS_SUPPORT_API_SIGN_VERIFY
-    (void)srcData;
     uint32_t alg;
     int32_t ret = CheckAndGetAlgorithm(paramSet, g_signAlg, HKS_ARRAY_SIZE(g_signAlg), &alg);
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "local check and get alg failed")
+
+    if (alg == HKS_ALG_ML_DSA) {
+        ret = HksCheckMlDsaSignVerifyParam(paramSet, srcData);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "local check ml-dsa sign or verify params failed")
+    }
 
     struct ParamsValues params;
     (void)memset_s(&params, sizeof(params), 0, sizeof(params));

@@ -70,6 +70,9 @@ void HksFillUsageSpec(const struct HksParamSet *paramSet, struct HksUsageSpec *u
             case HKS_TAG_MGF_DIGEST:
                 usageSpec->mgfDigest = paramSet->params[i].uint32Param;
                 break;
+            case HKS_TAG_PQC_SIG_MODE:
+                usageSpec->pqcSigMode = paramSet->params[i].uint32Param;
+                break;
             default:
                 break;
         }
@@ -87,6 +90,29 @@ void HksFreeUsageSpec(struct HksUsageSpec **usageSpec)
         HKS_FREE((*usageSpec)->algParam);
     }
     HKS_FREE(*usageSpec);
+}
+
+int32_t HksFillMlDsaContext(const struct HksParamSet *paramSet, struct HksUsageSpec *usageSpec,
+    struct HksBlob *context)
+{
+    HKS_IF_NULL_LOGE_RETURN(paramSet, HKS_ERROR_NULL_POINTER, "paramSet is null")
+    HKS_IF_NULL_LOGE_RETURN(usageSpec, HKS_ERROR_NULL_POINTER, "usageSpec is null")
+    HKS_IF_NULL_LOGE_RETURN(context, HKS_ERROR_NULL_POINTER, "context is null")
+
+    struct HksParam *ctxParam = NULL;
+    int32_t ret = HksGetParam(paramSet, HKS_TAG_CONTEXT, &ctxParam);
+    if (ret == HKS_ERROR_PARAM_NOT_EXIST) {
+        return HKS_SUCCESS;
+    }
+    HKS_IF_NOT_SUCC_LOGE_RETURN(ret, ret, "get ml-dsa context param failed")
+
+    HKS_IF_TRUE_LOGE_RETURN(ctxParam->blob.size > HKS_ML_DSA_MAX_CONTEXT_SIZE, HKS_ERROR_INVALID_ARGUMENT,
+        "invalid ml-dsa context size %" LOG_PUBLIC "u", ctxParam->blob.size)
+
+    context->data = ctxParam->blob.data;
+    context->size = ctxParam->blob.size;
+    usageSpec->algParam = context;
+    return HKS_SUCCESS;
 }
 
 void HksFillKeyDerivationParam(const struct HksParamSet *paramSet, struct HksKeyDerivationParam *param)

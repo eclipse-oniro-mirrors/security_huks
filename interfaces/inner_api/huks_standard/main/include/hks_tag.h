@@ -172,6 +172,10 @@ enum HuksExternalPinAuthState {
     HKS_ASSIGN_ENUM_VALUE(HKS_TAG_AAD, HKS_TAG_TYPE_BYTES | 527) \
     HKS_ASSIGN_ENUM_VALUE(HKS_TAG_CONTEXT, HKS_TAG_TYPE_BYTES | 528) \
     HKS_ASSIGN_ENUM_VALUE(HKS_TAG_TIMEOUT, HKS_TAG_TYPE_UINT | 529) \
+    /* PQC signature mode for ML-DSA, see enum HksPqcSigMode (pure / pre-hash / external mu). */ \
+    /* Optional at key generation/import: if present the key is bound to the mode, otherwise the */ \
+    /* sign/verify request chooses the mode (pure by default), so old keys stay usable. */ \
+    HKS_ASSIGN_ENUM_VALUE(HKS_TAG_PQC_SIG_MODE, HKS_TAG_TYPE_UINT | 530) \
     \
     HKS_ASSIGN_ENUM_VALUE(HKS_TAG_APPLICATION_ID, HKS_TAG_TYPE_BYTES | 601) \
     HKS_ASSIGN_ENUM_VALUE(HKS_TAG_ATTESTATION_ID_PRODUCT_MODEL, HKS_TAG_TYPE_BYTES | 710) \

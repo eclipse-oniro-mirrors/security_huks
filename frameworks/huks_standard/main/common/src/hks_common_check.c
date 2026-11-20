@@ -176,10 +176,32 @@ int32_t HksGetDigestLen(uint32_t digest, uint32_t *digestLen)
         case HKS_DIGEST_SM3:
             *digestLen = HKS_DIGEST_SM3_LEN;
             break;
+#ifndef HKS_CHIPSET_API
+        case HKS_DIGEST_SHAKE128:
+            *digestLen = HKS_DIGEST_SHAKE128_LEN;
+            break;
+        case HKS_DIGEST_SHAKE256:
+            *digestLen = HKS_DIGEST_SHAKE256_LEN;
+            break;
+#endif
         default:
             return HKS_ERROR_INVALID_DIGEST;
     }
     return HKS_SUCCESS;
+}
+
+bool HksIsSupportedPqcPreHashDigest(uint32_t digest)
+{
+    if (digest == HKS_DIGEST_SHA256) {
+        return true;
+    }
+#ifndef HKS_CHIPSET_API
+    if ((digest == HKS_DIGEST_SHA384) || (digest == HKS_DIGEST_SHA512) || (digest == HKS_DIGEST_SHAKE128) ||
+        (digest == HKS_DIGEST_SHAKE256)) {
+        return true;
+    }
+#endif
+    return false;
 }
 
 int32_t HksCheckAesAeMode(const struct HksParamSet *paramSet, bool *isAes, bool *isAeMode)

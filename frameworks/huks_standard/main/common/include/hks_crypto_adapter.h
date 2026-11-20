@@ -39,6 +39,13 @@ int32_t HksFillAeadParam(const struct HksParamSet *paramSet, struct HksBlob *inp
 
 int32_t HksFillIvParam(const struct HksParamSet *paramSet, struct HksUsageSpec *usageSpec);
 
+/*
+ * Fills the ML-DSA context string (HKS_TAG_CONTEXT) into usageSpec->algParam.
+ * context is the storage of the returned blob and must outlive the usageSpec.
+ */
+int32_t HksFillMlDsaContext(const struct HksParamSet *paramSet, struct HksUsageSpec *usageSpec,
+    struct HksBlob *context);
+
 int32_t HksBuildCipherUsageSpec(const struct HksParamSet *paramSet, bool isEncrypt, struct HksBlob *inputText,
     struct HksUsageSpec **outUsageSpec);
 

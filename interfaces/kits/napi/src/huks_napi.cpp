@@ -83,6 +83,7 @@ static void AddHuksTagPart1(napi_env env, napi_value tag)
     AddInt32Property(env, tag, "HUKS_TAG_NONCE", HKS_TAG_NONCE);
     AddInt32Property(env, tag, "HUKS_TAG_IV", HKS_TAG_IV);
     AddInt32Property(env, tag, "HUKS_TAG_CONTEXT", HKS_TAG_CONTEXT);
+    AddInt32Property(env, tag, "HUKS_TAG_PQC_SIG_MODE", HKS_TAG_PQC_SIG_MODE);
 
     /* Key derivation TAG */
     AddInt32Property(env, tag, "HUKS_TAG_INFO", HKS_TAG_INFO);
@@ -562,6 +563,8 @@ static napi_value CreateHuksKeyDigest(napi_env env)
     AddInt32Property(env, keyDisgest, "HUKS_DIGEST_SHA384", HKS_DIGEST_SHA384);
     AddInt32Property(env, keyDisgest, "HUKS_DIGEST_SHA512", HKS_DIGEST_SHA512);
     AddInt32Property(env, keyDisgest, "HUKS_DIGEST_SM3", HKS_DIGEST_SM3);
+    AddInt32Property(env, keyDisgest, "HUKS_DIGEST_SHAKE128", HKS_DIGEST_SHAKE128);
+    AddInt32Property(env, keyDisgest, "HUKS_DIGEST_SHAKE256", HKS_DIGEST_SHAKE256);
 
     return keyDisgest;
 }
@@ -722,6 +725,18 @@ static napi_value CreateHuksRsaPssSaltLenType(napi_env env)
     return rsaPssSaltLenType;
 }
 
+static napi_value CreateHuksPqcSigMode(napi_env env)
+{
+    napi_value pqcSigMode = nullptr;
+    NAPI_CALL(env, napi_create_object(env, &pqcSigMode));
+
+    AddInt32Property(env, pqcSigMode, "HUKS_PQC_SIG_MODE_PURE", HKS_PQC_SIG_MODE_PURE);
+    AddInt32Property(env, pqcSigMode, "HUKS_PQC_SIG_MODE_PREHASH", HKS_PQC_SIG_MODE_PREHASH);
+    AddInt32Property(env, pqcSigMode, "HUKS_PQC_SIG_MODE_EXTERNAL_MU", HKS_PQC_SIG_MODE_EXTERNAL_MU);
+
+    return pqcSigMode;
+}
+
 static napi_value CreateHuksAuthStorageLevel(napi_env env)
 {
     napi_value value = nullptr;
@@ -835,6 +850,7 @@ static napi_value HuksNapiRegister(napi_env env, napi_value exports)
         DECLARE_NAPI_PROPERTY("HuksAuthStorageLevel", CreateHuksAuthStorageLevel(env)),
         DECLARE_NAPI_PROPERTY("HuksKeyWrapType", CreateHuksKeyWrapType(env)),
         DECLARE_NAPI_PROPERTY("HuksKeySecurityLevel", CreateHuksKeySecurityLevel(env)),
+        DECLARE_NAPI_PROPERTY("HuksPqcSigMode", CreateHuksPqcSigMode(env)),
     };
     napi_property_descriptor desc[HKS_ARRAY_SIZE(NAPI_FUNC_DESC) + HKS_ARRAY_SIZE(propDesc)];
 

@@ -137,8 +137,26 @@ enum HksKeyDigest {
 #ifndef HKS_CHIPSET_API
     HKS_DIGEST_SHA384 = 13,
     HKS_DIGEST_SHA512 = 14,
+    /* used by ML-DSA HashML-DSA pre-hash mode (32-byte output) and the internal tr/rho computations */
+    HKS_DIGEST_SHAKE128 = 15,
+    /* used by ML-DSA HashML-DSA pre-hash mode (64-byte output) and the internal tr/mu computations */
+    HKS_DIGEST_SHAKE256 = 16,
 #endif
 };
+
+/**
+ * @brief hks PQC signature mode (used with HKS_TAG_PQC_SIG_MODE)
+ *
+ * FIPS 204 defines two signature interfaces: the pure ML-DSA interface (the whole message is
+ * encoded with domain separator 0) and the HashML-DSA (pre-hash) interface (the digest of the
+ * message is encoded with domain separator 1 together with the hash OID). In addition, a caller
+ * may supply the message representative mu directly (external mu).
+ */
+typedef enum HksPqcSigMode {
+    HKS_PQC_SIG_MODE_PURE = 0,          /* FIPS 204 ML-DSA, the input is the original message M */
+    HKS_PQC_SIG_MODE_PREHASH = 1,       /* FIPS 204 HashML-DSA, the input is PH(M), see HKS_TAG_DIGEST */
+    HKS_PQC_SIG_MODE_EXTERNAL_MU = 2,   /* the input is the 64-byte message representative mu */
+} HksPqcSigMode;
 
 /**
  * @brief hks key size

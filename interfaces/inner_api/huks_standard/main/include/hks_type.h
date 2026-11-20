@@ -148,6 +148,8 @@ struct HksEncapsulationResult {
 #define HKS_BITS_PER_BYTE 8
 #define MAX_KEY_SIZE 2048
 #define ML_DSA_MAX_KEY_SIZE 10000
+/* FIPS 204 external mu: mu = H(tr || M'), the output length of H (SHAKE256) is 64 bytes for all parameter sets */
+#define ML_DSA_MU_SIZE 64
 #define ML_KEM_MAX_KEY_SIZE 6000
 #define HKS_AE_NONCE_LEN 12
 #define HKS_MAX_KEY_ALIAS_LEN 128

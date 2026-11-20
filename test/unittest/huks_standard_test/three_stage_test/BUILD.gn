@@ -34,6 +34,7 @@ ohos_unittest("huks_UT_test") {
     "src/asymmetric_alg_test/hks_export_test_mt.cpp",
     "src/asymmetric_alg_test/hks_ml_dsa_sign_verify_part1_test.cpp",
     "src/asymmetric_alg_test/hks_ml_dsa_sign_verify_part2_test.cpp",
+    "src/asymmetric_alg_test/hks_ml_dsa_sign_verify_part3_test.cpp",
     "src/asymmetric_alg_test/hks_ml_dsa_sign_verify_test_common.cpp",
     "src/asymmetric_alg_test/hks_rsa_cipher_part3_test.cpp",
     "src/asymmetric_alg_test/hks_rsa_cipher_part4_test.cpp",

@@ -113,6 +113,10 @@ enum OH_Huks_KeyDigest {
     OH_HUKS_DIGEST_SHA384 = 13,
     /** SHA-512. */
     OH_HUKS_DIGEST_SHA512 = 14,
+    /** SHAKE128, used as the pre-hash function of ML-DSA. */
+    OH_HUKS_DIGEST_SHAKE128 = 15,
+    /** SHAKE256, used as the pre-hash function of ML-DSA. */
+    OH_HUKS_DIGEST_SHAKE256 = 16,
 };
 
 /**

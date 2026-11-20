@@ -29,6 +29,11 @@
 #define HKS_DIGEST_SHA384_LEN 48
 #define HKS_DIGEST_SHA512_LEN 64
 #define HKS_DIGEST_SM3_LEN 32
+#define HKS_DIGEST_SHAKE128_LEN 32
+#define HKS_DIGEST_SHAKE256_LEN 64
+
+/* FIPS 204: the ML-DSA context string is at most 255 bytes */
+#define HKS_ML_DSA_MAX_CONTEXT_SIZE 255
 
 #define HKS_DIGEST_SHA256_HEX_STRING_LEN 64
 
@@ -65,6 +70,13 @@ int32_t HksCheckBlob2AndParamSet2(const struct HksBlob *data1, const struct HksB
     const struct HksParamSet *paramSet1, const struct HksParamSet *paramSet2);
 
 int32_t HksGetDigestLen(uint32_t digest, uint32_t *digestLen);
+
+/*
+ * FIPS 204 HashML-DSA only allows the approved hash functions in Table 1 of the standard.
+ * HUKS supports the SHA-2 family members and the two SHAKE variants that have a public
+ * HKS_DIGEST value.
+ */
+bool HksIsSupportedPqcPreHashDigest(uint32_t digest);
 
 int32_t HksCheckAesAeMode(const struct HksParamSet *paramSet, bool *isAes, bool *isAeMode);
 

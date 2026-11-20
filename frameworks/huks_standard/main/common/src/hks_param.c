@@ -39,6 +39,7 @@ const uint32_t HKS_VALID_TAGS[] = {
     HKS_TAG_NONCE,
     HKS_TAG_IV,
     HKS_TAG_CONTEXT,
+    HKS_TAG_PQC_SIG_MODE,
 
     HKS_TAG_SALT,
     HKS_TAG_PWD,
