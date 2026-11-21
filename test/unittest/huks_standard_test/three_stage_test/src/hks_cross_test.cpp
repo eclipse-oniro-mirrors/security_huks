@@ -84,11 +84,11 @@ HWTEST_F(HksCrossTest, HksCrossTestAesCipher001, TestSize.Level0)
 
     ret = HksEncryptForDe(&keyAlias, encryptParamSet, &inData, &cipherText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksEncrypt failed.";
-    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, cipherText.size), HKS_SUCCESS) << "inData equals cipherText.";
+    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, inData.size), HKS_SUCCESS) << "inData equals cipherText.";
 
     ret = HksCrossTestAesDecrypt(&keyAlias, decryptParamSetTest, &cipherText, &plainText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksCrossTestAesDecrypt failed.";
-    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, plainText.size), HKS_SUCCESS) << "inData not equals plainText.";
+    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, inData.size), HKS_SUCCESS) << "inData not equals plainText.";
 
     HksDeleteKeyForDe(&keyAlias, nullptr);
     HksFreeParamSet(&genParamSet);
@@ -127,11 +127,11 @@ HWTEST_F(HksCrossTest, HksCrossTestAesCipher002, TestSize.Level0)
 
     ret = HksCrossTestAesEncrypt(&keyAlias, encryptParamSet, &inData, &cipherText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksCrossTestAesEncrypt failed.";
-    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, cipherText.size), HKS_SUCCESS) << "inData equals cipherText.";
+    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, inData.size), HKS_SUCCESS) << "inData equals cipherText.";
 
     ret = HksDecryptForDe(&keyAlias, decryptParamSet, &cipherText, &plainText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksDecrypt failed.";
-    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, plainText.size), HKS_SUCCESS) << "inData not equals plainText.";
+    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, inData.size), HKS_SUCCESS) << "inData not equals plainText.";
 
     HksDeleteKeyForDe(&keyAlias, nullptr);
     HksFreeParamSet(&genParamSet);
@@ -174,11 +174,11 @@ HWTEST_F(HksCrossTest, HksCrossTestRsaCipher001, TestSize.Level0)
 
     ret = HksEncryptForDe(&newKeyAlias, encryptParamSet, &inData, &cipherText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksEncrypt failed.";
-    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, cipherText.size), HKS_SUCCESS) << "inData equals cipherText.";
+    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, inData.size), HKS_SUCCESS) << "inData equals cipherText.";
 
     ret = HksCrossTestRsaDecrypt(&keyAlias, decryptParamSet, &cipherText, &plainText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksCrossTestRsaDecrypt failed.";
-    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, plainText.size), HKS_SUCCESS) << "inData not equals plainText.";
+    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, inData.size), HKS_SUCCESS) << "inData not equals plainText.";
 
     HksDeleteKeyForDe(&keyAlias, nullptr);
     HksDeleteKeyForDe(&newKeyAlias, nullptr);
@@ -222,11 +222,11 @@ HWTEST_F(HksCrossTest, HksCrossTestRsaCipher002, TestSize.Level0)
 
     ret = HksCrossTestRsaEncrypt(&newKeyAlias, encryptParamSet, &inData, &cipherText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksCrossTestRsaEncrypt failed.";
-    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, cipherText.size), HKS_SUCCESS) << "inData equals cipherText.";
+    EXPECT_NE(HksMemCmp(inData.data, cipherText.data, inData.size), HKS_SUCCESS) << "inData equals cipherText.";
 
     ret = HksDecryptForDe(&keyAlias, decryptParamSet, &cipherText, &plainText);
     EXPECT_EQ(ret, HKS_SUCCESS) << "HksDecrypt failed.";
-    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, plainText.size), HKS_SUCCESS) << "inData not equals plainText.";
+    EXPECT_EQ(HksMemCmp(inData.data, plainText.data, inData.size), HKS_SUCCESS) << "inData not equals plainText.";
 
     HksDeleteKeyForDe(&keyAlias, nullptr);
     HksDeleteKeyForDe(&newKeyAlias, nullptr);

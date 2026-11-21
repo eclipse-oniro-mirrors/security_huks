@@ -49,6 +49,22 @@ napi_status napi_get_named_property(napi_env env, napi_value object, const char*
     return OHOS::Security::Huks::Assistant::ins_->napi_get_named_property(env, object, utf8name, result);
 }
 
+napi_status napi_typeof(napi_env env, napi_value value, napi_valuetype* result)
+{
+    if (OHOS::Security::Huks::Assistant::ins_ == nullptr) {
+        return napi_invalid_arg;
+    }
+    return OHOS::Security::Huks::Assistant::ins_->napi_typeof(env, value, result);
+}
+
+napi_status napi_is_array(napi_env env, napi_value value, bool* result)
+{
+    if (OHOS::Security::Huks::Assistant::ins_ == nullptr) {
+        return napi_invalid_arg;
+    }
+    return OHOS::Security::Huks::Assistant::ins_->napi_is_array(env, value, result);
+}
+
 napi_status napi_get_value_int32(napi_env env, napi_value value, int32_t* result)
 {
     if (OHOS::Security::Huks::Assistant::ins_ == nullptr) {

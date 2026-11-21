@@ -152,4 +152,60 @@ HWTEST_F(HksResponseTest, ProcessInfoForIpcThreadSlot, TestSize.Level0)
     HKS_FREE_BLOB(out.processName);
     HKS_FREE_BLOB(out.userId);
 }
+// ===== coverage additions: drive HksCaptureAsyncResult via HksSendResponse(nullptr) + misc =====
+
+/**
+ * @tc.name: HksResponseTest.AsyncResultSlotFullCapture
+ * @tc.desc: tdd full capture path: HksSendResponse with null context writes result/blob into the slot
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksResponseTest, AsyncResultSlotFullCapture, TestSize.Level0)
+{
+    HKS_LOG_I("enter AsyncResultSlotFullCapture");
+    uint8_t payload[] = { 0x11, 0x22, 0x33, 0x44 };
+    struct HksBlob blob = { sizeof(payload), payload };
+    HksAsyncResultSlotSetEnabled(true);
+    HksSendResponse(nullptr, 4321, &blob);
+    int32_t result = 0;
+    struct HksBlob response = { 0, nullptr };
+    HksAsyncResultSlotTake(&result, &response);
+    EXPECT_EQ(result, 4321);
+    ASSERT_NE(response.data, nullptr);
+    EXPECT_EQ(response.size, sizeof(payload));
+    EXPECT_EQ(response.data[0], 0x11);
+    HKS_FREE_BLOB(response);
+}
+
+/**
+ * @tc.name: HksResponseTest.AsyncResultSlotNullResponse
+ * @tc.desc: ttd HksSendResponse null context with null response captures result only
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksResponseTest, AsyncResultSlotNullResponse, TestSize.Level0)
+{
+    HKS_LOG_I("enter AsyncResultSlotNullResponse");
+    HksAsyncResultSlotSetEnabled(true);
+    HksSendResponse(nullptr, -555, nullptr);
+    int32_t result = 0;
+    struct HksBlob response = { 0, nullptr };
+    HksAsyncResultSlotTake(&result, &response);
+    EXPECT_EQ(result, -555);
+    EXPECT_EQ(response.data, nullptr);
+}
+
+/**
+ * @tc.name: HksResponseTest.IpcCallingUidAndFrontUser
+ * @tc.desc: tdd HksGetIpcCallingUid and HksCheckIsFrontUser direct calls
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksResponseTest, IpcCallingUidAndFrontUser, TestSize.Level0)
+{
+    HKS_LOG_I("enter IpcCallingUidAndFrontUser");
+    uint32_t uid = HksGetIpcCallingUid();
+    EXPECT_GE(uid, 0u);
+
+    bool isFront = true;
+    int32_t ret = HksCheckIsFrontUser(100, &isFront);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+}
 } // namespace Unittest::HksResponseTest

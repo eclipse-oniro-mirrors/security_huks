@@ -17,6 +17,8 @@
 #include <cstring>
 
 #include "hks_client_ipc.h"
+#include "hks_client_ipc_serialization.h"
+#include "hks_ipc_check.h"
 #include "hks_log.h"
 #include "hks_mem.h"
 #include "hks_param.h"
@@ -68,7 +70,8 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest002, TestSize.Level0)
     HKS_LOG_I("enter HksClientServiceIpcTest002");
     struct HksBlob name = MakeBlob("testProvider");
     int32_t ret = HksClientRegisterProvider(&name, nullptr);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_EQ(ret, HKS_ERROR_NO_PERMISSION);
+    (void)HksClientUnregisterProvider(&name, nullptr);
 }
 
 /**
@@ -82,9 +85,9 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest003, TestSize.Level0)
     int32_t ret = HksClientUnregisterProvider(nullptr, nullptr);
     EXPECT_NE(ret, HKS_SUCCESS);
 
-    struct HksBlob name = MakeBlob("testProvider");
+    struct HksBlob name = MakeBlob("unknownProvider404");
     ret = HksClientUnregisterProvider(&name, nullptr);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_EQ(ret, HKS_ERROR_NO_PERMISSION);
 }
 
 /**
@@ -144,9 +147,9 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest007, TestSize.Level0)
 {
     HKS_LOG_I("enter HksClientServiceIpcTest007");
     struct HksExtCertInfoSet certSet = { .count = 0, .certs = nullptr };
-    struct HksBlob providerName = MakeBlob("testProvider");
+    struct HksBlob providerName = MakeBlob("unknownProvider404");
     int32_t ret = HksClientExportProviderCertificates(&providerName, nullptr, &certSet);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_EQ(ret, HKS_ERROR_NO_PERMISSION);
 }
 
 /**
@@ -159,7 +162,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest008, TestSize.Level0)
     HKS_LOG_I("enter HksClientServiceIpcTest008");
     struct HksExtCertInfoSet certSet = { .count = 0, .certs = nullptr };
     int32_t ret = HksClientExportProviderCertificates(nullptr, nullptr, &certSet);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_EQ(ret, HKS_ERROR_NO_PERMISSION);
 }
 
 /**
@@ -185,7 +188,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest010, TestSize.Level0)
     struct HksBlob index = MakeBlob("testIndex");
     struct HksExtCertInfoSet certSet = { .count = 0, .certs = nullptr };
     int32_t ret = HksClientExportCertificate(&index, nullptr, &certSet);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_EQ(ret, HKS_ERROR_NO_PERMISSION);
 }
 
 /**
@@ -221,7 +224,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest012, TestSize.Level0)
     struct HksExtCertInfo certInfo = { .purpose = 0, .index = indexBlob, .cert = certBlob };
 
     ret = HksClientImportCertificate(&resourceId, &certInfo, paramSet);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_EQ(ret, HKS_ERROR_NO_PERMISSION);
     HksFreeParamSet(&paramSet);
 }
 
@@ -305,7 +308,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest018, TestSize.Level0)
 
     struct HksBlob resourceId = MakeBlob("testResourceId");
     ret = HksClientOpenRemoteHandle(&resourceId, paramSet);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_TRUE(ret == HKS_ERROR_NO_PERMISSION || ret == HKS_ERROR_FIND_FUNC_MAP_FAIL);
     HksFreeParamSet(&paramSet);
 }
 
@@ -317,9 +320,9 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest018, TestSize.Level0)
 HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest019, TestSize.Level0)
 {
     HKS_LOG_I("enter HksClientServiceIpcTest019");
-    struct HksBlob resourceId = MakeBlob("testResourceId");
+    struct HksBlob resourceId = MakeBlob("neverOpened404");
     int32_t ret = HksClientCloseRemoteHandle(&resourceId, nullptr);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_TRUE(ret == HKS_ERROR_NO_PERMISSION || ret == HKS_ERROR_FIND_FUNC_MAP_FAIL);
 }
 
 /**
@@ -372,7 +375,7 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest023, TestSize.Level0)
     HKS_LOG_I("enter HksClientServiceIpcTest023");
     struct HksBlob index = MakeBlob("testIndex");
     int32_t ret = HksClientClearPinAuthState(&index, nullptr);
-    EXPECT_NE(ret, HKS_SUCCESS);
+    EXPECT_TRUE(ret == HKS_ERROR_NO_PERMISSION || ret == HKS_ERROR_FIND_FUNC_MAP_FAIL);
 }
 
 /**
@@ -430,5 +433,290 @@ HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest027, TestSize.Level0)
     int32_t ret = HksClientSetOrGetRemoteProperty(HKS_EXT_PROPERTY_OPERATION_GET,
         &resourceId, &propertyId, nullptr, &propertySetOut);
     EXPECT_NE(ret, HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest028
+ * @tc.desc: tdd HksClientSetStorage valid path, HksSetStoragePack + IPC covered
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest028, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest028");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob keyAlias = MakeBlob("tddStorageAlias");
+    uint8_t dataBuf[] = "storagedata";
+    struct HksBlob data = { .size = sizeof(dataBuf), .data = dataBuf };
+    ret = HksClientSetStorage(&keyAlias, paramSet, &data);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest029
+ * @tc.desc: tdd HksClientGetStorage valid path, HksKeyExistPack + IPC covered
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest029, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest029");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob keyAlias = MakeBlob("tddStorageAlias");
+    uint8_t outBuf[32] = { 0 };
+    struct HksBlob data = { .size = sizeof(outBuf), .data = outBuf };
+    ret = HksClientGetStorage(&keyAlias, paramSet, &data);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest030
+ * @tc.desc: tdd HksClientStorageExist valid path
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest030, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest030");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob keyAlias = MakeBlob("tddStorageAlias");
+    ret = HksClientStorageExist(&keyAlias, paramSet);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest031
+ * @tc.desc: tdd HksSetStoragePack pure function valid path
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest031, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest031");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob keyAlias = MakeBlob("tddStorageAlias");
+    uint8_t dataBuf[] = "storagedata";
+    struct HksBlob data = { .size = sizeof(dataBuf), .data = dataBuf };
+    uint8_t outBuf[512] = { 0 };
+    struct HksBlob dest = { .size = sizeof(outBuf), .data = outBuf };
+    ret = HksSetStoragePack(&dest, &keyAlias, paramSet, &data);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest032
+ * @tc.desc: tdd HksCheckIpcGetStorage null/invalid/valid branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest032, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest032");
+    EXPECT_NE(HksCheckIpcGetStorage(nullptr, nullptr), HKS_SUCCESS);
+    struct HksBlob alias = MakeBlob("tddAlias");
+    EXPECT_NE(HksCheckIpcGetStorage(&alias, nullptr), HKS_SUCCESS);
+
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    EXPECT_EQ(HksCheckIpcGetStorage(&alias, paramSet), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest033
+ * @tc.desc: tdd HksClientGetAnonCertChain + HksClientGetCertChain valid path
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest033, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest033");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob keyAlias = MakeBlob("tddAnonAlias");
+    uint8_t outBuf[64] = { 0 };
+    struct HksBlob certChain = { .size = sizeof(outBuf), .data = outBuf };
+    ret = HksClientGetAnonCertChain(&keyAlias, paramSet, &certChain);
+    EXPECT_NE(ret, HKS_SUCCESS);
+    ret = HksClientGetCertChain(&keyAlias, paramSet, &certChain);
+    EXPECT_NE(ret, HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest034
+ * @tc.desc: tdd HksCheckIpcGenerateKey null/oversize/valid branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest034, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest034");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    uint8_t oversizeBuf[8] = { 0 };
+    struct HksBlob oversize = { .size = 0xFFFF, .data = oversizeBuf };
+    EXPECT_NE(HksCheckIpcGenerateKey(&oversize, paramSet), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcGenerateKey(nullptr, paramSet), HKS_SUCCESS);
+    struct HksBlob alias = MakeBlob("tddAlias");
+    EXPECT_EQ(HksCheckIpcGenerateKey(&alias, paramSet), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcGenerateKey(&alias, nullptr), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest035
+ * @tc.desc: tdd HksCheckIpcImportKey/ExportPublicKey/DeleteKey/KeyExist branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest035, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest035");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    struct HksBlob alias = MakeBlob("tddAlias");
+    uint8_t keyBuf[] = "keymaterial";
+    struct HksBlob key = { .size = sizeof(keyBuf), .data = keyBuf };
+    EXPECT_EQ(HksCheckIpcImportKey(&alias, paramSet, &key), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcImportKey(nullptr, paramSet, &key), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcImportKey(&alias, nullptr, &key), HKS_SUCCESS);
+    EXPECT_EQ(HksCheckIpcExportPublicKey(&alias, paramSet, &key), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcExportPublicKey(nullptr, paramSet, &key), HKS_SUCCESS);
+    EXPECT_EQ(HksCheckIpcDeleteKey(&alias, paramSet), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcDeleteKey(nullptr, paramSet), HKS_SUCCESS);
+    EXPECT_EQ(HksCheckIpcKeyExist(&alias, paramSet), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcKeyExist(nullptr, paramSet), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest036
+ * @tc.desc: tdd HksCheckIpcAgreeKey and HksCheckIpcDeriveKey branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest036, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest036");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    uint8_t keyBuf[] = "keymaterial";
+    struct HksBlob privKey = { .size = sizeof(keyBuf), .data = keyBuf };
+    struct HksBlob pubKey = { .size = sizeof(keyBuf), .data = keyBuf };
+    struct HksBlob agreed = { .size = sizeof(keyBuf), .data = keyBuf };
+    ret = HksCheckIpcAgreeKey(paramSet, &privKey, &pubKey, &agreed);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcAgreeKey(nullptr, &privKey, &pubKey, &agreed), HKS_SUCCESS);
+    ret = HksCheckIpcDeriveKey(paramSet, &privKey, &agreed);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcDeriveKey(nullptr, &privKey, &agreed), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest037
+ * @tc.desc: tdd HksCheckIpcTwoBlobsParamSet null/oversize/valid branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest037, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest037");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    uint8_t buf1[] = "blob1";
+    uint8_t buf2[] = "blob2";
+    struct HksBlob b1 = { .size = sizeof(buf1), .data = buf1 };
+    struct HksBlob b2 = { .size = sizeof(buf2), .data = buf2 };
+    ret = HksCheckIpcTwoBlobsParamSet(&b1, &b2, paramSet, 64, 64);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcTwoBlobsParamSet(nullptr, &b2, paramSet, 64, 64), HKS_SUCCESS);
+    struct HksBlob big = { .size = 0xFFFF, .data = buf1 };
+    EXPECT_NE(HksCheckIpcTwoBlobsParamSet(&big, &b2, paramSet, 64, 64), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcTwoBlobsParamSet(&b1, &big, paramSet, 64, 64), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest038
+ * @tc.desc: tdd HksCheckIpcBlob null/oversize/valid branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest038, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest038");
+    uint8_t buf[] = "blobdata";
+    struct HksBlob b = { .size = sizeof(buf), .data = buf };
+    EXPECT_EQ(HksCheckIpcBlob(&b, 64), HKS_SUCCESS);
+    EXPECT_NE(HksCheckIpcBlob(nullptr, 64), HKS_SUCCESS);
+    struct HksBlob big = { .size = 0xFFFF, .data = buf };
+    EXPECT_NE(HksCheckIpcBlob(&big, 64), HKS_SUCCESS);
+    struct HksBlob nullData = { .size = 8, .data = nullptr };
+    EXPECT_NE(HksCheckIpcBlob(&nullData, 64), HKS_SUCCESS);
+}
+
+/**
+ * @tc.name: HksClientServiceIpcTest.HksClientServiceIpcTest039
+ * @tc.desc: tdd HksCheckIpcBlobAndCertInfo null/invalid/valid branches
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksClientServiceIpcTest, HksClientServiceIpcTest039, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksClientServiceIpcTest039");
+    struct HksParamSet *paramSet = nullptr;
+    int32_t ret = HksInitParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    ret = HksBuildParamSet(&paramSet);
+    ASSERT_EQ(ret, HKS_SUCCESS);
+    uint8_t rid[] = "resourceid";
+    struct HksBlob resourceId = { .size = sizeof(rid), .data = rid };
+    uint8_t idx[] = "idx";
+    uint8_t cert[] = "cert";
+    struct HksExtCertInfo ok = {
+        .purpose = 0,
+        .index = { .size = sizeof(idx), .data = idx },
+        .cert = { .size = sizeof(cert), .data = cert },
+    };
+    ret = HksCheckIpcBlobAndCertInfo(&resourceId, &ok, paramSet, 64);
+    EXPECT_EQ(ret, HKS_SUCCESS);
+    EXPECT_EQ(HksCheckIpcBlobAndCertInfo(nullptr, &ok, paramSet, 64), HKS_ERROR_NULL_POINTER);
+    EXPECT_EQ(HksCheckIpcBlobAndCertInfo(&resourceId, nullptr, paramSet, 64), HKS_ERROR_NULL_POINTER);
+    EXPECT_EQ(HksCheckIpcBlobAndCertInfo(&resourceId, &ok, nullptr, 64), HKS_ERROR_NULL_POINTER);
+    struct HksExtCertInfo badIdx = ok;
+    badIdx.index = { .size = 0, .data = nullptr };
+    EXPECT_NE(HksCheckIpcBlobAndCertInfo(&resourceId, &badIdx, paramSet, 64), HKS_SUCCESS);
+    struct HksExtCertInfo badCert = ok;
+    badCert.cert = { .size = 0, .data = nullptr };
+    EXPECT_NE(HksCheckIpcBlobAndCertInfo(&resourceId, &badCert, paramSet, 64), HKS_SUCCESS);
+    HksFreeParamSet(&paramSet);
 }
 }
