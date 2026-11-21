@@ -362,9 +362,19 @@ static int32_t CheckAndGetAlgorithm(
         "get param 0x%" LOG_PUBLIC "x failed!", HKS_TAG_ALGORITHM)
 
     ret = HksCheckValue(algParam->uint32Param, expectAlg, expectCnt);
+
+#if defined(HKS_ROSEN_EMULATOR) && defined(HKS_SUPPORT_CMAC_C)
+    if (algParam->uint32Param == HKS_ALG_CMAC) {
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_EMULATOR_NOT_SUPPORT,
+        "alg value %" LOG_PUBLIC "u not support on emulator", algParam->uint32Param)
+    } else {
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INVALID_ALGORITHM,
+        "alg value %" LOG_PUBLIC "u not expected", algParam->uint32Param)
+    }
+#else
     HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_ERROR_INVALID_ALGORITHM,
         "alg value %" LOG_PUBLIC "u not expected", algParam->uint32Param)
-
+#endif
     *alg = algParam->uint32Param;
     return ret;
 }
@@ -551,23 +561,6 @@ static int32_t CheckGenKeyMacDeriveParams(
     return ret;
 }
 
-#ifdef HKS_ROSEN_EMULATOR
-static int32_t HksEmulatorCheckUnsupportedParams(uint32_t alg, const struct HksParamSet *paramSet) {
-    if (alg == HKS_ALG_CMAC) {
-        HKS_LOG_E("CMAC is not supported on enmulator");
-        return HKS_ERROR_EMULATOR_NOT_SUPPORT;
-    }
-    struct HksParam *emulatorAuthTypeParam = NULL;
-    if ((HksGetParam(paramSet, HKS_TAG_USER_AUTH_TYPE, &emulatorAuthTypeParam) == HKS_SUCCESS) && 
-        ((emulatorAuthTypeParam->uint32Param & (HKS_USER_AUTH_TYPE_FINGERPRINT | HKS_USER_AUTH_TYPE_FACE)) != 0)) {
-        HKS_LOG_E("non-PIN user auth is not supported on emulator, authType = %"LOG_PUBLIC "u",
-            emulatorAuthTypeParam->uint32Param);
-        return HKS_ERROR_EMULATOR_NOT_SUPPORT;
-    }
-    return HKS_SUCCESS;
-}
-#endif
-
 static int32_t CoreCheckGenKeyParams(const struct HksParamSet *paramSet, struct ParamsValues *params, uint32_t keyFlag)
 {
     uint32_t alg;
@@ -595,11 +588,6 @@ static int32_t CoreCheckGenKeyParams(const struct HksParamSet *paramSet, struct 
             return HKS_ERROR_INVALID_PURPOSE;
         }
     }
-
-#ifdef HKS_ROSEN_EMULATOR
-    int emulatorRet = HksEmulatorCheckUnsupportedParams(alg, paramSet);
-    HKS_IF_NOT_SUCC_RETURN(emulatorRet, emulatorRet);
-#endif
 
     struct HksParam *authTypeParam = NULL;
     int32_t result = HksGetParam(paramSet, HKS_TAG_USER_AUTH_TYPE, &authTypeParam);

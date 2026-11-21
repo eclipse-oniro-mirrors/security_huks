@@ -265,9 +265,9 @@ HKS_API_EXPORT int32_t HksFinish(const struct HksBlob *handle, const struct HksP
 #ifndef HKS_CHIPSET_API
 HKS_API_EXPORT int32_t HksRegisterProvider(const struct HksBlob *name, const struct HksParamSet *paramSetIn)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter RegisterProvider");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((paramSetIn == NULL) || (name == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -283,9 +283,9 @@ HKS_API_EXPORT int32_t HksRegisterProvider(const struct HksBlob *name, const str
 
 HKS_API_EXPORT int32_t HksUnregisterProvider(const struct HksBlob *name, const struct HksParamSet *paramSetIn)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter UnregisterProvider");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if (name == NULL) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -302,9 +302,9 @@ HKS_API_EXPORT int32_t HksUnregisterProvider(const struct HksBlob *name, const s
 HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
     struct HksAbilityInfo *abilityInfo)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter HksQueryAbilityInfo");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((resourceId == NULL) || (abilityInfo == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -323,9 +323,9 @@ HKS_API_EXPORT int32_t HksQueryAbilityInfo(struct HksBlob *resourceId, const str
 HKS_API_EXPORT int32_t HksExportProviderCertificates(const struct HksBlob *providerName,
     const struct HksParamSet *paramSetIn, struct HksExtCertInfoSet *certSet)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter HksExportProviderCertificates");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if (paramSetIn == NULL) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -343,9 +343,9 @@ HKS_API_EXPORT int32_t HksExportProviderCertificates(const struct HksBlob *provi
 HKS_API_EXPORT int32_t HksExportCertificate(const struct HksBlob *resourceId,
     const struct HksParamSet *paramSetIn, struct HksExtCertInfoSet *certSet)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter HksExportCertificate");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((paramSetIn == NULL) || (resourceId == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -363,9 +363,9 @@ HKS_API_EXPORT int32_t HksExportCertificate(const struct HksBlob *resourceId,
 HKS_API_EXPORT int32_t HksImportCertificate(const struct HksBlob *resourceId,
     const struct HksExtCertInfo *certInfo, const struct HksParamSet *paramSetIn)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter HksImportCertificate");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((paramSetIn == NULL) || (resourceId == NULL) || (certInfo == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -383,9 +383,9 @@ HKS_API_EXPORT int32_t HksImportCertificate(const struct HksBlob *resourceId,
 HKS_API_EXPORT int32_t HksAuthUkeyPin(const struct HksBlob *resourceId, const struct HksParamSet *paramSetIn,
     uint32_t *retryCount)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter AuthUkeyPin");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((resourceId == NULL) || (paramSetIn == NULL) || (retryCount == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -403,9 +403,9 @@ HKS_API_EXPORT int32_t HksAuthUkeyPin(const struct HksBlob *resourceId, const st
 HKS_API_EXPORT int32_t HksGetUkeyPinAuthState(const struct HksBlob *resourceId,
     const struct HksParamSet *paramSetIn, int32_t *status)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter GetUkeyPinAuthState");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((resourceId == NULL) || (paramSetIn == NULL) || (status == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -422,9 +422,9 @@ HKS_API_EXPORT int32_t HksGetUkeyPinAuthState(const struct HksBlob *resourceId,
 
 HKS_API_EXPORT int32_t HksOpenRemoteResource(const struct HksBlob *resourceId, const struct HksParamSet *paramSetIn)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter OpenRemoteHandle");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((resourceId == NULL) || (paramSetIn == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -440,9 +440,9 @@ HKS_API_EXPORT int32_t HksOpenRemoteResource(const struct HksBlob *resourceId, c
 
 HKS_API_EXPORT int32_t HksCloseRemoteResource(const struct HksBlob *resourceId, const struct HksParamSet *paramSetIn)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter CloseRemoteHandle");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((resourceId == NULL) || (paramSetIn == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -457,9 +457,9 @@ HKS_API_EXPORT int32_t HksCloseRemoteResource(const struct HksBlob *resourceId, 
 }
 HKS_API_EXPORT int32_t HksClearUkeyPinAuthState(const struct HksBlob *resourceId, const struct HksParamSet *paramSetIn)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter ClearUkeyPinAuthState");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if (resourceId == NULL) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -477,9 +477,9 @@ HKS_API_EXPORT int32_t HksSetOrGetRemoteProperty(enum HksExtPropertyOperation op
     const struct HksBlob *resourceId, const struct HksBlob *propertyId,
     const struct HksParamSet *paramSetIn, struct HksParamSet **propertySetOut)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter SetOrGetRemoteProperty, operation = %" LOG_PUBLIC "d", operation);
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((resourceId == NULL) || (propertyId == NULL) || (paramSetIn == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
@@ -507,9 +507,9 @@ HKS_API_EXPORT int32_t HksSetOrGetRemoteProperty(enum HksExtPropertyOperation op
 HKS_API_EXPORT int32_t HksGetResourceId(const struct HksBlob *providerName, const struct HksParamSet *paramSetIn,
     struct HksBlob *resourceId)
 {
-    HKS_EMULATOR_NOT_SUPPORT_RETURN();
 #ifdef HKS_UKEY_EXTENSION_CRYPTO
     HKS_LOG_D("enter GetResourceId");
+    HKS_EMULATOR_NOT_SUPPORT_RETURN();
     if ((providerName == NULL) || (paramSetIn == NULL) || (resourceId == NULL)) {
         return HKS_ERROR_NULL_POINTER;
     }
