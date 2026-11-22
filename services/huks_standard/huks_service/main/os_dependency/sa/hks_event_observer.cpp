@@ -42,6 +42,8 @@
 
 const static std::string DEVELOPER_ID = "developerId";
 const static std::string ASSET_ACCESS_GROUPS = "assetAccessGroups";
+const static std::string KEEP_DATA = "keepData";
+const static std::string PACKAGE_UNINSTALLED_DATA_CLEARED = "usual.event.PACKAGE_UNINSTALLED_DATA_CLEARED";
 const char GROUP_SEPARATOR = ',';
 
 #define USER_ID_ROOT                  "0"
@@ -146,37 +148,57 @@ const int32_t BACKUP_UID = 1089;
 constexpr static const char *UID = "uid";
 constexpr static const char *IS_BMS_EXTENSION_UNINSTALLED = "isBmsExtensionUninstalled";
 
+static int32_t DealPackageRemovedEvent(const OHOS::EventFwk::Want &want, const std::string &action,
+    struct HksProcessInfo &processInfo)
+{
+    int uid = want.GetIntParam(UID, -1);
+    int userId = -1;
+    int32_t ret = HKS_FAILURE;
+    bool anco = want.GetBoolParam(IS_BMS_EXTENSION_UNINSTALLED, true);
+    if (action == PACKAGE_UNINSTALLED_DATA_CLEARED) {
+        ret = GetOsAccountIdFromUid(uid, userId);
+        anco = false;
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_FAILURE, "get clear user if failed")
+    } else if (!anco) {
+        ret = GetOsAccountIdFromUid(uid, userId);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_FAILURE, "get local user if failed")
+    } else {
+        ret = HksPluginGetAncoUser(&userId);
+        HKS_IF_NOT_SUCC_LOGE_RETURN(ret, HKS_FAILURE, "can not get anco user id")
+    }
+
+    bool keepData = want.GetBoolParam(KEEP_DATA, false);
+    HKS_LOG_I("package removed: uid: %" LOG_PUBLIC "d userId: %" LOG_PUBLIC "d, anco: %" LOG_PUBLIC "d, "
+        "keepData: %" LOG_PUBLIC "d", uid, userId, anco, keepData);
+
+    HKS_IF_TRUE_RETURN(keepData, HKS_SUCCESS)
+
+    ret = GetProcessInfo(userId, uid, &processInfo);
+    HKS_IF_TRUE_EXCU(ret == HKS_SUCCESS, HksServiceDeleteProcessInfo(&processInfo, anco));
+#ifdef L2_STANDARD
+    HKS_IF_TRUE_EXCU(ret == HKS_SUCCESS, HksServiceDeleteGroupKey(&processInfo, want));
+#endif
+    return HKS_SUCCESS;
+}
+
+static bool IsPackageRemovedEvent(const std::string &action)
+{
+    return action == OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_PACKAGE_REMOVED ||
+        action == OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_SANDBOX_PACKAGE_REMOVED ||
+        action == PACKAGE_UNINSTALLED_DATA_CLEARED;
+}
+
 static void DealAllSystemEvent(const OHOS::EventFwk::CommonEventData &data)
 {
     auto want = data.GetWant();
     struct HksProcessInfo processInfo = { { 0, nullptr }, { 0, nullptr } };
     std::string action = want.GetAction();
-    if (action == OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_PACKAGE_REMOVED ||
-        action == OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_SANDBOX_PACKAGE_REMOVED) {
-        int uid = want.GetIntParam(UID, -1);
-        int userId = -1;
-        int32_t ret = HKS_FAILURE;
-        bool anco = want.GetBoolParam(IS_BMS_EXTENSION_UNINSTALLED, true);
-        if (!anco) {
-            ret = GetOsAccountIdFromUid(uid, userId);
-            HKS_IF_NOT_SUCC_LOGE_RETURN_VOID(ret, "get local user if failed")
-        } else {
-            ret = HksPluginGetAncoUser(&userId);
-            HKS_IF_NOT_SUCC_LOGE_RETURN_VOID(ret, "can not get anco user id")
-        }
-
-        HKS_LOG_I("package removed: uid: %" LOG_PUBLIC "d userId: %" LOG_PUBLIC "d, anco: %" LOG_PUBLIC "d",
-            uid, userId, anco);
-
-        ret = GetProcessInfo(userId, uid, &processInfo);
-        HKS_IF_TRUE_EXCU(ret == HKS_SUCCESS, HksServiceDeleteProcessInfo(&processInfo, anco));
-#ifdef L2_STANDARD
-        HKS_IF_TRUE_EXCU(ret == HKS_SUCCESS, HksServiceDeleteGroupKey(&processInfo, want));
-#endif
+    if (IsPackageRemovedEvent(action)) {
+        auto ret = DealPackageRemovedEvent(want, action, processInfo);
+        HKS_IF_NOT_SUCC_LOGE_RETURN_VOID(ret, "deal package removed event failed")
     } else if (action == OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_USER_REMOVED) {
         int userId = data.GetCode();
         HKS_LOG_I("HksService user removed: userId is %" LOG_PUBLIC "d", userId);
-
         GetUserId(userId, &(processInfo.userId));
         HksServiceDeleteProcessInfo(&processInfo, false);
     } else if (action == OHOS::EventFwk::CommonEventSupport::COMMON_EVENT_USER_UNLOCKED) {
@@ -222,6 +244,7 @@ bool SystemEventObserver::SubscribeSystemEvent()
     OHOS::EventFwk::MatchingSkills matchingSkills;
     matchingSkills.AddEvent(EventFwk::CommonEventSupport::COMMON_EVENT_PACKAGE_REMOVED);
     matchingSkills.AddEvent(EventFwk::CommonEventSupport::COMMON_EVENT_SANDBOX_PACKAGE_REMOVED);
+    matchingSkills.AddEvent(PACKAGE_UNINSTALLED_DATA_CLEARED);
     matchingSkills.AddEvent(EventFwk::CommonEventSupport::COMMON_EVENT_USER_REMOVED);
     matchingSkills.AddEvent(EventFwk::CommonEventSupport::COMMON_EVENT_USER_UNLOCKED);
     matchingSkills.AddEvent(EventFwk::CommonEventSupport::COMMON_EVENT_SCREEN_OFF);

@@ -385,6 +385,18 @@ static bool IsThisGroupExistApp(const std::string &group, const std::vector<AppE
     return false;
 }
 
+static bool IsThisGroupKeepData(const std::string &developerId, const std::string &group, int32_t userId)
+{
+    sptr<AppExecFwk::IBundleMgr> bundleMgrProxy = GetBundleMgr();
+    HKS_IF_NULL_LOGE_RETURN(bundleMgrProxy, true, "needKeepData failed to get bundleMgrProxy")
+
+    bool needKeepData{false};
+    auto ret = bundleMgrProxy->CheckBundleExistByDeveloperIdAndAssetGroup(developerId, group, userId, needKeepData);
+    HKS_IF_TRUE_LOGE_RETURN(ret != OHOS::ERR_OK, true,
+        "check bundle exist by developerId and assetAccessGroup failed, ret = %" LOG_PUBLIC "d", ret)
+    return needKeepData;
+}
+
 int32_t HksGetDeleteGroups(const struct HksProcessInfo *processInfo, const std::string &developerId,
     const std::vector<std::string> &thisGroups, std::vector<std::string> &deleteGroups)
 {
@@ -399,7 +411,8 @@ int32_t HksGetDeleteGroups(const struct HksProcessInfo *processInfo, const std::
 
     for (auto &group : thisGroups) {
         HKS_LOG_I("this group: %" LOG_PUBLIC "s", group.c_str());
-        if (!IsThisGroupExistApp(group, bundleInfos)) {
+        if (!IsThisGroupExistApp(group, bundleInfos) &&
+            !IsThisGroupKeepData(developerId, group, processInfo->userIdInt)) {
             deleteGroups.push_back(group);
         }
     }
