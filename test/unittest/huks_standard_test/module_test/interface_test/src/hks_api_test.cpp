@@ -653,4 +653,19 @@ HWTEST_F(HksAPITest, HksAPITest00511, TestSize.Level0)
     EXPECT_EQ(ret, HKS_ERROR_VERIFICATION_FAILED) << "PEM cert should fail verification, ret = " << ret;
     HksFreeParamSet(&paramSetOut);
 }
+
+/**
+ * @tc.name: HksAPITest.HksAPITest00512
+ * @tc.desc: tdd HksGetErrorMsg returns thread-local error message buffer
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksAPITest, HksAPITest00512, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksAPITest00512");
+    const char *msg = HksGetErrorMsg();
+    EXPECT_NE(msg, nullptr);
+    (void)HksGenerateRandom(nullptr, nullptr);
+    msg = HksGetErrorMsg();
+    EXPECT_NE(msg, nullptr);
+}
 }

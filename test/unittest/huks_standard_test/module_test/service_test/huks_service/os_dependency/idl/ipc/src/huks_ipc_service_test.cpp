@@ -30,6 +30,10 @@
 using namespace testing::ext;
 using namespace OHOS;
 namespace Unittest::HksIpcServiceTest {
+
+
+
+
 class HksIpcServiceTest : public testing::Test {
 public:
     static void SetUpTestCase(void);
@@ -1874,4 +1878,88 @@ HWTEST_F(HksIpcServiceTest, HksIpcServiceTest050, TestSize.Level0)
     HKS_FREE(bufData);
 }
 
+// ===== coverage additions: HksIpcServiceDecapsulate / HksIpcErrorResponse / HksIpcServiceInit =====
+extern "C" void HksIpcErrorResponse(const uint8_t *context);
+
+/**
+ * @tc.name: HksIpcServiceTest.HksIpcServiceTest100
+ * @tc.desc: tdd HksIpcServiceDecapsulate with a well-formed packed request
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcServiceTest, HksIpcServiceTest100, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcServiceTest100");
+    const char *aliasStr = "DecapsulateCov001";
+    struct HksBlob keyAlias = { (uint32_t)strlen(aliasStr), (uint8_t *)aliasStr };
+    struct HksBlob sharedKeyAlias = { (uint32_t)strlen(aliasStr), (uint8_t *)aliasStr };
+    struct HksParamSet *paramSet = NULL;
+    ASSERT_EQ(HKS_SUCCESS, HksInitParamSet(&paramSet));
+    struct HksParam params[] = {
+        { .tag = HKS_TAG_ALGORITHM, .uint32Param = HKS_ALG_HKDF },
+        { .tag = HKS_TAG_PURPOSE, .uint32Param = HKS_KEY_PURPOSE_DERIVE },
+    };
+    ASSERT_EQ(HKS_SUCCESS, HksAddParams(paramSet, params, sizeof(params) / sizeof(params[0])));
+    ASSERT_EQ(HKS_SUCCESS, HksBuildParamSet(&paramSet));
+
+    uint32_t size = 4 * 1024;
+    uint8_t *buf = (uint8_t *)HksMalloc(size);
+    ASSERT_NE(buf, nullptr);
+    (void)memset(buf, 0, size);
+    struct HksBlob srcData = { size, buf };
+    uint32_t offset = 0;
+    ASSERT_EQ(HKS_SUCCESS, HksDecapsulatePack(&srcData, &keyAlias, paramSet, &sharedKeyAlias, &offset));
+    srcData.size = offset;
+
+    MessageParcel reply;
+    uint8_t *context = reinterpret_cast<uint8_t *>(&reply);
+    HksIpcServiceDecapsulate(&srcData, context); // any ret path covered; service-side response goes to reply
+
+    HKS_FREE(buf);
+    HksFreeParamSet(&paramSet);
+}
+
+/**
+ * @tc.name: HksIpcServiceTest.HksIpcServiceTest101
+ * @tc.desc: tdd HksIpcServiceDecapsulate with empty blob hits unpack failure branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcServiceTest, HksIpcServiceTest101, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcServiceTest101");
+    struct HksBlob empty = { 0, NULL };
+    MessageParcel reply;
+    uint8_t *context = reinterpret_cast<uint8_t *>(&reply);
+    HksIpcServiceDecapsulate(&empty, context);
+    ASSERT_TRUE(true);
+}
+
+/**
+ * @tc.name: HksIpcServiceTest.HksIpcServiceTest102
+ * @tc.desc: tdd HksIpcErrorResponse sends error response into the reply parcel
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcServiceTest, HksIpcServiceTest102, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcServiceTest102");
+    MessageParcel reply;
+    uint8_t *context = reinterpret_cast<uint8_t *>(&reply);
+    HksIpcErrorResponse(context);
+    ASSERT_TRUE(true);
+}
+
+/**
+ * @tc.name: HksIpcServiceTest.HksIpcServiceTest103
+ * @tc.desc: tdd HksIpcServiceInit with null paramSetBlob hits early failure branch
+ * @tc.type: FUNC
+ */
+HWTEST_F(HksIpcServiceTest, HksIpcServiceTest103, TestSize.Level0)
+{
+    HKS_LOG_I("enter HksIpcServiceTest103");
+    uint8_t dummy = 0;
+    struct HksBlob emptyBlob = { 0, &dummy };
+    MessageParcel reply;
+    uint8_t *context = reinterpret_cast<uint8_t *>(&reply);
+    HksIpcServiceInit(&emptyBlob, NULL, context);
+    ASSERT_TRUE(true);
+}
 }

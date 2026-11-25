@@ -25,10 +25,12 @@ ohos_unittest("service_ipc_test") {
   sources = [
     "src/huks_ipc_serialization_test.cpp",
     "src/huks_ipc_service_test.cpp",
-    "src/huks_permission_check_test.cpp",
+    "src/hks_permission_check_test.cpp",
     "src/hks_ipc_service_cert_chain_test.cpp",
     "src/hks_message_handler_find_test.cpp",
     "src/hks_response_test.cpp",
+    "src/hks_task_executor_test.cpp",
+    "src/hks_anco_inject_test.cpp",
   ]
 
   configs = [
@@ -40,11 +42,13 @@ ohos_unittest("service_ipc_test") {
     "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/sa",
     "include",
     "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/idl/ipc",
+    "//base/security/huks/services/huks_standard/huks_service/main/core/include",
     "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/include",
   ]
 
   sources += [
     "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/idl/ipc/hks_ipc_service.c",
+    "//base/security/huks/frameworks/huks_standard/main/common/src/hks_task_executor.cpp",
     "//base/security/huks/services/huks_standard/huks_service/main/os_dependency/idl/ipc/hks_service_ipc_serialization.c",
     "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/src/hks_ipc_serialization.c",
     "//base/security/huks/frameworks/huks_standard/main/os_dependency/ipc/src/hks_client_ipc_serialization.c",

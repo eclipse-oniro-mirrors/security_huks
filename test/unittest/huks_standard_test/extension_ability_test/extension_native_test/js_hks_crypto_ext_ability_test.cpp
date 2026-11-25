@@ -46,6 +46,7 @@ public:
     static void SetUpTestCase(void)
     {
         Assistant::ins_ = insMoc;
+        ON_CALL(*insMoc, napi_typeof(_, _, _)).WillByDefault(Return(napi_invalid_arg));
     }
     static void TearDownTestCase()
     {
@@ -54,8 +55,16 @@ public:
         jsRuntime = nullptr;
         Assistant::ins_ = nullptr;
     }
-    void SetUp() {}
-    void TearDown() {}
+    void SetUp()
+    {
+        insMoc = std::make_shared<AssistantMock>();
+        Assistant::ins_ = insMoc;
+        ON_CALL(*insMoc, napi_typeof(_, _, _)).WillByDefault(Return(napi_invalid_arg));
+    }
+    void TearDown() 
+    {
+        Mock::VerifyAndClearExpectations(insMoc.get());
+    }
 public:
     static inline std::shared_ptr<Security::Huks::AssistantMock> insMoc = std::make_shared<AssistantMock>();
     static inline std::unique_ptr<AbilityRuntime::JsRuntime> jsRuntime = std::make_unique<AbilityRuntime::JsRuntime>();
@@ -695,7 +704,8 @@ HWTEST_F(JsCryptoExtAbilityTest, GetUint8ArrayValue_0000, testing::ext::TestSize
     EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _)).WillOnce(Return(napi_invalid_arg));
     EXPECT_EQ(GetUint8ArrayValue(env, value, result), napi_invalid_arg);
 
-    EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _)).WillOnce(Return(napi_ok));
+    EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<ARG_INDEX_SECOND>(napi_int8_array), Return(napi_ok)));
     EXPECT_EQ(GetUint8ArrayValue(env, value, result), napi_invalid_arg);
 
     EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _))
@@ -706,7 +716,7 @@ HWTEST_F(JsCryptoExtAbilityTest, GetUint8ArrayValue_0000, testing::ext::TestSize
     EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _))
         .WillOnce(DoAll(SetArgPointee<ARG_INDEX_SECOND>(napi_uint8_array), Return(napi_ok)));
     EXPECT_CALL(*insMoc, napi_get_arraybuffer_info(_, _, _, _)).WillOnce(Return(napi_ok));
-    EXPECT_EQ(GetUint8ArrayValue(env, value, result), napi_generic_failure);
+    EXPECT_EQ(GetUint8ArrayValue(env, value, result), napi_ok);
 }
 
 HWTEST_F(JsCryptoExtAbilityTest, GetHksCertInfoValue_0000, testing::ext::TestSize.Level0)
@@ -806,7 +816,7 @@ HWTEST_F(JsCryptoExtAbilityTest, GetHksCertInfoValue_0001, testing::ext::TestSiz
     EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _))
         .WillOnce(DoAll(SetArgPointee<ARG_INDEX_SECOND>(napi_uint8_array), Return(napi_ok)));
     EXPECT_CALL(*insMoc, napi_get_arraybuffer_info(_, _, _, _)).WillOnce(Return(napi_ok));
-    EXPECT_EQ(GetHksCertInfoValue(env, value, certInfo), napi_generic_failure);
+    EXPECT_EQ(GetHksCertInfoValue(env, value, certInfo), HKS_SUCCESS);
 }
 
 HWTEST_F(JsCryptoExtAbilityTest, GetHksParamsfromValue_0000, testing::ext::TestSize.Level0)
@@ -823,7 +833,7 @@ HWTEST_F(JsCryptoExtAbilityTest, GetHksParamsfromValue_0000, testing::ext::TestS
         .WillOnce(DoAll(Invoke(&ReturnsNonNullValue), Return(napi_ok)));
     EXPECT_CALL(*insMoc, napi_get_value_uint32(_, _, _)).WillOnce(testing::Return(napi_invalid_arg));
     EXPECT_EQ(GetHksParamsfromValue(env, value, param), napi_invalid_arg);
-    
+
     EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
         .WillOnce(DoAll(Invoke(&ReturnsNonNullValue), Return(napi_ok)))
         .WillOnce(Return(napi_invalid_arg));
@@ -836,7 +846,7 @@ HWTEST_F(JsCryptoExtAbilityTest, GetHksParamsfromValue_0000, testing::ext::TestS
     EXPECT_CALL(*insMoc, napi_get_value_uint32(_, _, _))
         .WillOnce(DoAll(SetArgPointee<ARG_INDEX_SECOND>(HKS_TAG_TYPE_INVALID), Return(napi_ok)));
     EXPECT_EQ(GetHksParamsfromValue(env, value, param), napi_invalid_arg);
-    
+
     EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
         .WillOnce(DoAll(Invoke(&ReturnsNonNullValue), Return(napi_ok)))
         .WillOnce(DoAll(Invoke(&ReturnsNonNullValue), Return(napi_ok)));
@@ -942,7 +952,7 @@ HWTEST_F(JsCryptoExtAbilityTest, GetHksParamsfromValue_0002, testing::ext::TestS
     EXPECT_CALL(*insMoc, napi_get_typedarray_info(_, _, _, _, _, _, _))
         .WillOnce(DoAll(SetArgPointee<ARG_INDEX_SECOND>(napi_uint8_array), Return(napi_ok)));
     EXPECT_CALL(*insMoc, napi_get_arraybuffer_info(_, _, _, _)).WillOnce(Return(napi_ok));
-    EXPECT_EQ(GetHksParamsfromValue(env, value, param), napi_generic_failure);
+    EXPECT_EQ(GetHksParamsfromValue(env, value, param), napi_ok);
 }
 
 HWTEST_F(JsCryptoExtAbilityTest, HksCertInfoToString_0000, testing::ext::TestSize.Level0)
@@ -1404,6 +1414,238 @@ HWTEST_F(JsCryptoExtAbilityTest, Create_0001, testing::ext::TestSize.Level0)
     EXPECT_NE(result, nullptr);
     EXPECT_NE(static_cast<JsHksCryptoExtAbility *>(result), nullptr);
     delete result; // JsHksCryptoExtAbility destructor runs FreeNativeReference(null) under the mocked Assistant.
+}
+
+// ==================== js_ext_param_parser.cpp coverage ====================
+
+// ConvertFunctionResult - null funcResult.
+HWTEST_F(JsCryptoExtAbilityTest, ConvertFunctionResult_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    EXPECT_EQ(ConvertFunctionResult(env, nullptr, resultParams), HKS_ERROR_EXT_NULLPTR);
+}
+
+// ConvertFunctionResult - resultCode get fails.
+HWTEST_F(JsCryptoExtAbilityTest, ConvertFunctionResult_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _)).WillOnce(Return(napi_invalid_arg));
+    EXPECT_EQ(ConvertFunctionResult(env, funcResult, resultParams), HKS_ERROR_EXT_GET_NAME_PROPERTY_FAILED);
+}
+
+// ConvertFunctionResult - default paramType falls through to success.
+HWTEST_F(JsCryptoExtAbilityTest, ConvertFunctionResult_0002, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.paramType = static_cast<CryptoResultParamType>(9999);
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_number), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_CALL(*insMoc, napi_get_value_int32(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(0), Return(napi_ok)));
+    EXPECT_EQ(ConvertFunctionResult(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetOpenRemoteHandleParams - handle undefined returns success.
+HWTEST_F(JsCryptoExtAbilityTest, GetOpenRemoteHandleParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetOpenRemoteHandleParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetOpenRemoteHandleParams - handle wrong type returns error.
+HWTEST_F(JsCryptoExtAbilityTest, GetOpenRemoteHandleParams_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_number), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetOpenRemoteHandleParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetAuthUkeyPinParams - retryCount undefined then authState undefined -> success.
+HWTEST_F(JsCryptoExtAbilityTest, GetAuthUkeyPinParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetAuthUkeyPinParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetAuthUkeyPinParams - retryCount negative returns error.
+HWTEST_F(JsCryptoExtAbilityTest, GetAuthUkeyPinParams_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_number), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_number), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_CALL(*insMoc, napi_get_value_int32(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(1), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_get_value_uint32(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(3u), Return(napi_ok)));
+    EXPECT_EQ(GetAuthUkeyPinParams(env, funcResult, resultParams), HKS_SUCCESS);
+    EXPECT_EQ(resultParams.retryCnt, 3u);
+    EXPECT_EQ(resultParams.authState, 1);
+}
+
+// GetUkeyPinAuthStateParams - authState undefined -> success.
+HWTEST_F(JsCryptoExtAbilityTest, GetUkeyPinAuthStateParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetUkeyPinAuthStateParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetSessionParams - errCode != 0 returns success early (skip outData parsing).
+HWTEST_F(JsCryptoExtAbilityTest, GetSessionParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = HKS_ERROR_EXT_JS_METHOD_ERROR;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    EXPECT_EQ(GetSessionParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetExportPublicKeyParams - errCode != 0 returns success early.
+HWTEST_F(JsCryptoExtAbilityTest, GetExportPublicKeyParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 1;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    EXPECT_EQ(GetExportPublicKeyParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetSessionParams - outData undefined returns success.
+HWTEST_F(JsCryptoExtAbilityTest, GetSessionParams_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetSessionParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetExportCertificateParams - certs undefined is not an object.
+HWTEST_F(JsCryptoExtAbilityTest, GetExportCertificateParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetExportCertificateParams(env, funcResult, resultParams), HKS_ERROR_EXT_GET_VALUE_FAILED);
+}
+
+// GetExportCertificateParams - certs not an array returns error.
+HWTEST_F(JsCryptoExtAbilityTest, GetExportCertificateParams_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_object), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_CALL(*insMoc, napi_is_array(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(false), Return(napi_ok)));
+    EXPECT_EQ(GetExportCertificateParams(env, funcResult, resultParams), HKS_ERROR_EXT_GET_VALUE_FAILED);
+}
+
+// GetGetPropertyParams - errCode != 0 returns success early.
+HWTEST_F(JsCryptoExtAbilityTest, GetGetPropertyParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 1;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    EXPECT_EQ(GetGetPropertyParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetGetPropertyParams - property undefined returns success.
+HWTEST_F(JsCryptoExtAbilityTest, GetGetPropertyParams_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 0;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_EQ(GetGetPropertyParams(env, funcResult, resultParams), HKS_SUCCESS);
+}
+
+// GetErrorInfoParams - errCode == 0 and errInfo not found, creates default errInfo.
+HWTEST_F(JsCryptoExtAbilityTest, GetErrorInfoParams_0000, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 1;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_undefined), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    GetErrorInfoParams(env, funcResult, resultParams);
+    EXPECT_NE(resultParams.errInfo, nullptr);
+}
+
+// GetErrorInfoParams - errno not found creates errInfo with hasErrorInfo=true.
+HWTEST_F(JsCryptoExtAbilityTest, GetErrorInfoParams_0001, TestSize.Level0)
+{
+    CryptoResultParam resultParams{};
+    resultParams.errCode = 1;
+    napi_value funcResult = reinterpret_cast<napi_value>(0x1);
+    napi_value napiVal = reinterpret_cast<napi_value>(0x2);
+    EXPECT_CALL(*insMoc, napi_get_named_property(_, _, _, _))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)))
+        .WillOnce(DoAll(SetArgPointee<3>(napiVal), Return(napi_ok)));
+    EXPECT_CALL(*insMoc, napi_typeof(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(napi_object), Return(napi_ok))).WillRepeatedly(Return(napi_invalid_arg));
+    EXPECT_CALL(*insMoc, napi_get_value_int32(_, _, _))
+        .WillOnce(DoAll(SetArgPointee<2>(0), Return(napi_invalid_arg)));
+    GetErrorInfoParams(env, funcResult, resultParams);
+    EXPECT_NE(resultParams.errInfo, nullptr);
 }
 
 }

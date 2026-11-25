@@ -38,6 +38,8 @@ public:
         napi_env, napi_value, napi_value, size_t, const napi_value*, napi_value*) = 0;
     virtual napi_status napi_get_reference_value(napi_env, napi_ref, napi_value*) = 0;
     virtual napi_status napi_get_named_property(napi_env, napi_value, const char*, napi_value*) = 0;
+    virtual napi_status napi_typeof(napi_env, napi_value, napi_valuetype*) = 0;
+    virtual napi_status napi_is_array(napi_env, napi_value, bool*) = 0;
     virtual napi_status napi_send_event(napi_env, const std::function<void()>&, napi_event_priority) = 0;
     virtual napi_status napi_get_value_int32(napi_env, napi_value, int32_t*) = 0;
     virtual napi_status napi_get_value_int64(napi_env, napi_value, int64_t*) = 0;
@@ -88,6 +90,8 @@ public:
         napi_value*));
     MOCK_METHOD3(napi_get_reference_value, napi_status(napi_env, napi_ref, napi_value*));
     MOCK_METHOD4(napi_get_named_property, napi_status(napi_env, napi_value, const char*, napi_value*));
+    MOCK_METHOD3(napi_typeof, napi_status(napi_env, napi_value, napi_valuetype*));
+    MOCK_METHOD3(napi_is_array, napi_status(napi_env, napi_value, bool*));
     MOCK_METHOD3(napi_send_event, napi_status(napi_env, const std::function<void()>&, napi_event_priority));
     MOCK_METHOD3(napi_get_value_int32, napi_status(napi_env, napi_value, int32_t*));
     MOCK_METHOD3(napi_get_value_int64, napi_status(napi_env, napi_value, int64_t*));
